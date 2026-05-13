@@ -1,0 +1,9 @@
+.env
+.env.local
+node_modules/
+worldmonitor_repo/
+docs/all_chunks.json
+__pycache__/
+*.pyc
+.DS_Store
+.next/

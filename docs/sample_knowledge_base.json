@@ -1,0 +1,150 @@
+[
+  {
+    "chunk_id": "chunk_00000",
+    "file_path": ".github/ISSUE_TEMPLATE/bug_report.yml",
+    "module": "root",
+    "language": "yaml",
+    "chunk_index": 0,
+    "content": "name: Bug Report\ndescription: Report a bug in World Monitor\nlabels: [\"bug\"]\nbody:\n  - type: markdown\n    attributes:\n      value: |\n        Thanks for taking the time to report a bug! Please fill out the sections below so we can reproduce and fix it.\n\n  - type: dropdown\n    id: variant\n    attributes:\n      label: Variant\n      description: Which variant are you using?\n      options:\n        - worldmonitor.app (Full / Geopolitical)\n        - tech.worldmonitor.app (Tech / Startup)\n        - finance.worldmonitor.app (Finance)\n        - Desktop app (Windows)\n        - Desktop app (macOS)\n        - Desktop app (Linux)\n    validations:\n      required: true\n\n  - type: dropdown\n    id: area\n    attributes:\n      label: Affected area\n      description: Which part of the app is affected?\n      options:\n        - Map / Globe\n        - News panels / RSS feeds\n        - AI Insights / World Brief\n        - Market Radar / Crypto\n        - Service Status\n        - Trending Keywords\n        - Country Brief pages\n        - Live video streams\n        - Desktop app (Tauri)\n        - Settings / API keys\n        - Settings / LLMs (Ollama, Groq, OpenRouter)\n        - Live webcams\n        - Other\n    validations:\n      required: true\n\n  - type: textarea\n    id: description\n    attributes:\n      label: Bug description\n      description: A clear description of what the bug is.\n      placeholder: Describe the bug...\n    validations:\n      required: true\n\n  - type: textarea\n    id: steps\n    attributes:\n      label: Steps to reproduce\n      description: Steps to reproduce the behavior.\n      placeholder: |\n        1. Go to '...'\n        2. Click on '...'\n        3. Scroll down to '...'\n        4. See error\n    validations:\n      required: true\n\n  - type: textarea\n    id: expected\n    attributes:\n      label: Expected behavior\n      description: What you expected to happen.\n    validations:\n      required: true\n\n  - type: textarea\n    id: screenshots\n    attributes:\n      label: Screenshots / Console errors\n      description: If applicable, add screenshots or paste browser console errors.\n\n  - type: input\n    id: browser\n    attributes:\n      label: Browser & OS\n      description: e.g. Chrome 120 on Windows 11, Safari 17 on macOS Sonoma\n      placeholder: Chrome 120 on Windows 11",
+    "tags": [
+      "ai",
+      "api",
+      "config",
+      "desktop",
+      "finance",
+      "maps",
+      "news",
+      "testing"
+    ],
+    "char_count": 2292
+  },
+  {
+    "chunk_id": "chunk_00031",
+    "file_path": "AGENTS.md",
+    "module": "documentation",
+    "language": "markdown",
+    "chunk_index": 0,
+    "content": "# AGENTS.md\n\nAgent entry point for WorldMonitor. Read this first, then follow links for depth.",
+    "tags": [
+      "documentation"
+    ],
+    "char_count": 94
+  },
+  {
+    "chunk_id": "chunk_00261",
+    "file_path": "api/_api-key.js",
+    "module": "api",
+    "language": "javascript",
+    "chunk_index": 0,
+    "content": "import { isSessionTokenShape, validateSessionToken } from './_session.js';\nconst DESKTOP_ORIGIN_PATTERNS = [\n  /^https?:\\/\\/tauri\\.localhost(:\\d+)?$/,\n  /^https?:\\/\\/[a-z0-9-]+\\.tauri\\.localhost(:\\d+)?$/i,\n  /^tauri:\\/\\/localhost$/,\n  /^asset:\\/\\/localhost$/,\n];\nfunction isDesktopOrigin(origin) {\n  return Boolean(origin) && DESKTOP_ORIGIN_PATTERNS.some(p => p.test(origin));\n}\nfunction isValidEnterpriseKey(key) {\n  if (!key) return false;\n  const validKeys = (process.env.WORLDMONITOR_VALID_KEYS || '').split(',').filter(Boolean);\n  return validKeys.includes(key);\n}\n\n// Note: HTTP headers like Origin / Referer / Sec-Fetch-Site are entirely\n// client-controlled at the wire level (see issue #3541 / closed PR #3554).\n// Trusting any of them as a \"this is a real browser\" signal is forgeable by\n// curl in one line. The previous Referer-origin fallback and Origin-pattern\n// no-key trust path are both gone. Browsers now authenticate via:\n//   1. A short-lived wms_-prefixed session token (HMAC-signed by /api/wm-session).\n//      Kind: 'session'. Anonymous; satisfies basic gate, but downstream\n//      entitlement / premium checks must STILL run (a session token is freely\n//      mintable by anyone who can hit /api/wm-session — it is NOT proof of a\n//      paying user). Rejected when forceKey=true.\n//   2. A wm_-prefixed user API key (validated against the user-key table by gateway).\n//      Kind: 'user'. Returns required:true/valid:false here so the gateway's\n//      fallback at server/gateway.ts:~440 triggers validateUserApiKey().\n//   3. An enterprise key (WORLDMONITOR_VALID_KEYS). Kind: 'enterprise'. The\n//      ONLY kind that bypasses entitlement checks (operator-issued).\n// Tauri desktop continues to authenticate via enterprise key.\n//\n// Async because session validation uses Web Crypto (crypto.subtle.sign).\n// All call sites await this — see grep for migration history.",
+    "tags": [
+      "ai",
+      "api",
+      "auth",
+      "config",
+      "desktop",
+      "finance",
+      "testing"
+    ],
+    "char_count": 1895
+  },
+  {
+    "chunk_id": "chunk_00618",
+    "file_path": "blog-site/src/content/blog/ai-powered-intelligence-without-the-cloud.md",
+    "module": "frontend",
+    "language": "markdown",
+    "chunk_index": 0,
+    "content": "---\ntitle: \"AI-Powered Intelligence Without the Cloud: World Monitor's Privacy-First Approach\"\ndescription: \"Run AI-powered intelligence analysis on your own hardware. World Monitor supports Ollama, LM Studio, and in-browser ML for private geopolitical analysis.\"\nmetaTitle: \"Local AI Intelligence Analysis | World Monitor\"\nkeywords: \"local LLM intelligence, private AI analysis, offline intelligence tool, Ollama OSINT, privacy-first AI dashboard\"\naudience: \"Privacy-conscious analysts, security researchers, government users, enterprise security teams, local LLM enthusiasts\"\nheroImage: \"/blog/images/blog/ai-powered-intelligence-without-the-cloud.jpg\"\npubDate: \"2026-03-07\"\n---\n\nEvery time you paste a sensitive document into ChatGPT, that data touches someone else's servers. For intelligence analysts, security researchers, and anyone handling sensitive geopolitical information, that's not just inconvenient. It's a risk.\n\nWorld Monitor takes a different approach. Every AI feature in the platform can run entirely on your own hardware, with no data leaving your machine. If you're new to the platform, learn [what World Monitor is and how it works](/blog/posts/what-is-worldmonitor-real-time-global-intelligence/).",
+    "tags": [
+      "ai",
+      "documentation"
+    ],
+    "char_count": 1221
+  },
+  {
+    "chunk_id": "chunk_01060",
+    "file_path": "consumer-prices-core/tests/unit/matcher.test.ts",
+    "module": "testing",
+    "language": "typescript",
+    "chunk_index": 0,
+    "content": "import { describe, it, expect } from 'vitest';\nimport { scoreMatch, bestMatch } from '../../src/matchers/canonical.js';\nimport type { CanonicalProduct } from '../../src/db/models.js';\nconst baseCanonical: CanonicalProduct = {\n  id: 'c1',\n  canonicalName: 'Basmati Rice 1kg',\n  brandNorm: 'Tilda',\n  category: 'rice',\n  variantNorm: null,\n  sizeValue: 1000,\n  sizeUnit: 'g',\n  baseQuantity: 1000,\n  baseUnit: 'g',\n  active: true,\n  createdAt: new Date(),\n};\n\ndescribe('scoreMatch', () => {\n  it('gives high score for exact brand+category+size match', () => {\n    const result = scoreMatch(\n      { rawTitle: 'Tilda Basmati Rice 1kg', rawBrand: 'Tilda', rawSizeText: '1kg', categoryText: 'rice' },\n      baseCanonical,\n    );\n    expect(result.score).toBeGreaterThanOrEqual(85);\n    expect(result.status).toBe('auto');\n  });\n\n  it('gives review score for partial match (no brand)', () => {\n    const result = scoreMatch(\n      { rawTitle: 'Basmati Rice 1kg', rawBrand: null, rawSizeText: '1kg', categoryText: 'rice' },\n      baseCanonical,\n    );\n    expect(result.score).toBeGreaterThanOrEqual(50);\n  });\n\n  it('rejects clearly wrong product', () => {\n    const result = scoreMatch(\n      { rawTitle: 'Sunflower Oil 2L', rawBrand: 'Generic', rawSizeText: '2L', categoryText: 'oil' },\n      baseCanonical,\n    );\n    expect(result.status).toBe('reject');\n  });\n});\n\ndescribe('bestMatch', () => {\n  it('returns null when no candidates', () => {\n    expect(bestMatch({ rawTitle: 'Eggs 12 Pack' }, [])).toBeNull();\n  });\n\n  it('returns best scoring non-reject match', () => {\n    const result = bestMatch(\n      { rawTitle: 'Tilda Basmati Rice 1kg', rawBrand: 'Tilda', rawSizeText: '1kg', categoryText: 'rice' },\n      [baseCanonical],\n    );\n    expect(result?.canonicalProductId).toBe('c1');\n    expect(result?.score).toBeGreaterThanOrEqual(85);\n  });\n});",
+    "tags": [
+      "ai",
+      "testing"
+    ],
+    "char_count": 1852
+  },
+  {
+    "chunk_id": "chunk_07618",
+    "file_path": "scripts/shared/ai-tokens.json",
+    "module": "shared",
+    "language": "json",
+    "chunk_index": 0,
+    "content": "{\n  \"ids\": [\"bittensor\",\"render-token\",\"fetch-ai\",\"akash-network\",\"ocean-protocol\",\"singularitynet\",\"grass\",\"virtual-protocol\",\"ai16z\",\"griffain\"],\n  \"meta\": {\n    \"bittensor\": { \"name\": \"Bittensor\", \"symbol\": \"TAO\" },\n    \"render-token\": { \"name\": \"Render\", \"symbol\": \"RENDER\" },\n    \"fetch-ai\": { \"name\": \"Fetch.ai\", \"symbol\": \"FET\" },\n    \"akash-network\": { \"name\": \"Akash Network\", \"symbol\": \"AKT\" },\n    \"ocean-protocol\": { \"name\": \"Ocean Protocol\", \"symbol\": \"OCEAN\" },\n    \"singularitynet\": { \"name\": \"SingularityNET\", \"symbol\": \"AGIX\" },\n    \"grass\": { \"name\": \"Grass\", \"symbol\": \"GRASS\" },\n    \"virtual-protocol\": { \"name\": \"Virtuals Protocol\", \"symbol\": \"VIRTUAL\" },\n    \"ai16z\": { \"name\": \"ai16z\", \"symbol\": \"AI16Z\" },\n    \"griffain\": { \"name\": \"Griffain\", \"symbol\": \"GRIFFAIN\" }\n  },\n  \"coinpaprika\": {\n    \"bittensor\": \"tao-bittensor\",\n    \"fetch-ai\": \"fet-fetch-ai\",\n    \"akash-network\": \"akt-akash-network\",\n    \"ocean-protocol\": \"ocean-ocean-protocol\",\n    \"singularitynet\": \"agix-singularitynet\"\n  }\n}",
+    "tags": [
+      "ai",
+      "api"
+    ],
+    "char_count": 1018
+  },
+  {
+    "chunk_id": "chunk_10671",
+    "file_path": "src/generated/server/worldmonitor/aviation/v1/service_server.ts",
+    "module": "server",
+    "language": "typescript",
+    "chunk_index": 0,
+    "content": "// Code generated by protoc-gen-ts-server. DO NOT EDIT.\n// source: worldmonitor/aviation/v1/service.proto\nexport interface ListAirportDelaysRequest {\n  pageSize: number;\n  cursor: string;\n  region: AirportRegion;\n  minSeverity: FlightDelaySeverity;\n}\nexport interface ListAirportDelaysResponse {\n  alerts: AirportDelayAlert[];\n  pagination?: PaginationResponse;\n}\nexport interface AirportDelayAlert {\n  id: string;\n  iata: string;\n  icao: string;\n  name: string;\n  city: string;\n  country: string;\n  location?: GeoCoordinates;\n  region: AirportRegion;\n  delayType: FlightDelayType;\n  severity: FlightDelaySeverity;\n  avgDelayMinutes: number;\n  delayedFlightsPct: number;\n  cancelledFlights: number;\n  totalFlights: number;\n  reason: string;\n  source: FlightDelaySource;\n  updatedAt: number;\n}\nexport interface GeoCoordinates {\n  latitude: number;\n  longitude: number;\n}\nexport interface PaginationResponse {\n  nextCursor: string;\n  totalCount: number;\n}\nexport interface GetAirportOpsSummaryRequest {\n  airports: string[];\n}\nexport interface GetAirportOpsSummaryResponse {\n  summaries: AirportOpsSummary[];\n  cacheHit: boolean;\n}\nexport interface AirportOpsSummary {\n  iata: string;\n  icao: string;\n  name: string;\n  timezone: string;\n  delayPct: number;\n  avgDelayMinutes: number;\n  cancellationRate: number;\n  totalFlights: number;\n  closureStatus: boolean;\n  notamFlags: string[];\n  severity: FlightDelaySeverity;\n  topDelayReasons: string[];\n  source: string;\n  updatedAt: number;\n}\nexport interface ListAirportFlightsRequest {\n  airport: string;\n  direction: FlightDirection;\n  limit: number;\n}\nexport interface ListAirportFlightsResponse {\n  flights: FlightInstance[];\n  totalAvailable: number;\n  source: string;\n  updatedAt: number;\n}\nexport interface FlightInstance {\n  flightNumber: string;\n  date: string;\n  operatingCarrier?: Carrier;\n  origin?: AirportRef;\n  destination?: AirportRef;\n  scheduledDeparture: number;\n  estimatedDeparture: number;\n  actualDeparture: number;\n  scheduledArrival: number;\n  estimatedArrival: number;\n  actualArrival: number;\n  status: FlightInstanceStatus;\n  delayMinutes: number;\n  cancelled: boolean;\n  diverted: boolean;\n  gate: string;\n  terminal: string;\n  aircraftIcao24: string;\n  aircraftType: string;\n  codeshareFlightNumbers: string[];\n  source: string;\n  updatedAt: number;\n}\nexport interface Carrier {\n  iataCode: string;\n  icaoCode: string;\n  name: string;\n}\nexport interface AirportRef {\n  iata: string;\n  icao: string;\n  name: string;\n  timezone: string;\n}\nexport interface GetCarrierOpsRequest {\n  airports: string[];\n  minFlights: number;\n}\nexport interface GetCarrierOpsResponse {\n  carriers: CarrierOpsSummary[];\n  source: string;\n  updatedAt: number;\n}\nexport interface CarrierOpsSummary {\n  carrier?: Carrier;\n  airport: string;\n  totalFlights: number;\n  delayedCount: number;\n  cancelledCount: number;\n  avgDelayMinutes: number;\n  delayPct: number;\n  cancellationRate: number;\n  updatedAt: number;\n}\nexport interface GetFlightStatusRequest {\n  flightNumber: string;\n  date: string;\n  origin: string;\n}\nexport interface GetFlightStatusResponse {\n  flights: FlightInstance[];\n  source: string;\n  cacheHit: boolean;\n}",
+    "tags": [
+      "ai",
+      "caching"
+    ],
+    "char_count": 3176
+  },
+  {
+    "chunk_id": "chunk_00001",
+    "file_path": ".github/ISSUE_TEMPLATE/config.yml",
+    "module": "root",
+    "language": "yaml",
+    "chunk_index": 0,
+    "content": "blank_issues_enabled: false\ncontact_links:\n  - name: Documentation\n    url: https://github.com/koala73/worldmonitor/blob/main/docs/DOCUMENTATION.md\n    about: Read the full documentation before opening an issue\n  - name: Discussions\n    url: https://github.com/koala73/worldmonitor/discussions\n    about: Ask questions and share ideas in Discussions",
+    "tags": [
+      "ai",
+      "api"
+    ],
+    "char_count": 349
+  },
+  {
+    "chunk_id": "chunk_00002",
+    "file_path": ".github/ISSUE_TEMPLATE/feature_request.yml",
+    "module": "root",
+    "language": "yaml",
+    "chunk_index": 0,
+    "content": "name: Feature Request\ndescription: Suggest a new feature or improvement\nlabels: [\"enhancement\"]\nbody:\n  - type: markdown\n    attributes:\n      value: |\n        Have an idea for World Monitor? We'd love to hear it!\n\n  - type: dropdown\n    id: area\n    attributes:\n      label: Feature area\n      description: Which area does this feature relate to?\n      options:\n        - Map / Globe / Data layers\n        - News panels / RSS feeds\n        - AI / Intelligence analysis\n        - Market data / Crypto\n        - Desktop app\n        - UI / UX\n        - API / Backend\n        - Other\n    validations:\n      required: true\n\n  - type: textarea\n    id: description\n    attributes:\n      label: Description\n      description: A clear description of the feature you'd like.\n      placeholder: I'd like to see...\n    validations:\n      required: true\n\n  - type: textarea\n    id: problem\n    attributes:\n      label: Problem it solves\n      description: What problem does this feature address? What's the use case?\n      placeholder: This would help with...\n    validations:\n      required: true\n\n  - type: textarea\n    id: alternatives\n    attributes:\n      label: Alternatives considered\n      description: Have you considered any alternative solutions or workarounds?\n\n  - type: textarea\n    id: context\n    attributes:\n      label: Additional context\n      description: Any mockups, screenshots, links, or references that help illustrate the idea.",
+    "tags": [
+      "ai",
+      "api",
+      "desktop",
+      "finance",
+      "maps",
+      "news"
+    ],
+    "char_count": 1441
+  },
+  {
+    "chunk_id": "chunk_00003",
+    "file_path": ".github/ISSUE_TEMPLATE/new_data_source.yml",
+    "module": "root",
+    "language": "yaml",
+    "chunk_index": 0,
+    "content": "name: New Data Source\ndescription: Suggest a new RSS feed, API, or map layer\nlabels: [\"data-source\"]\nbody:\n  - type: markdown\n    attributes:\n      value: |\n        World Monitor aggregates 100+ feeds and data layers. Suggest a new one!\n\n  - type: dropdown\n    id: type\n    attributes:\n      label: Source type\n      description: What kind of data source is this?\n      options:\n        - RSS / News feed\n        - API integration\n        - Map layer (geospatial data)\n        - Live video stream\n        - Status page\n        - Other\n    validations:\n      required: true\n\n  - type: dropdown\n    id: variant\n    attributes:\n      label: Target variant\n      description: Which variant should this appear in?\n      options:\n        - Full (Geopolitical)\n        - Tech (Startup)\n        - Finance\n        - All variants\n    validations:\n      required: true\n\n  - type: input\n    id: source-name\n    attributes:\n      label: Source name\n      description: Name of the source or organization.\n      placeholder: e.g. RAND Corporation, CoinDesk, USGS\n    validations:\n      required: true\n\n  - type: input\n    id: url\n    attributes:\n      label: Feed / API URL\n      description: Direct URL to the RSS feed, API endpoint, or data source.\n      placeholder: https://example.com/rss\n    validations:\n      required: true\n\n  - type: textarea\n    id: description\n    attributes:\n      label: Why add this source?\n      description: What value does this source bring? What does it cover that existing sources don't?\n      placeholder: This source provides coverage of...\n    validations:\n      required: true\n\n  - type: textarea\n    id: notes\n    attributes:\n      label: Additional notes\n      description: Any details about rate limits, authentication requirements, data format, or category placement.",
+    "tags": [
+      "ai",
+      "api",
+      "auth",
+      "finance",
+      "maps",
+      "news"
+    ],
+    "char_count": 1796
+  }
+]
