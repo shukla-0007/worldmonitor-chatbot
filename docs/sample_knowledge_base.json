@@ -1,25 +1,6 @@
 [
   {
     "chunk_id": "chunk_00000",
-    "file_path": ".github/ISSUE_TEMPLATE/bug_report.yml",
-    "module": "root",
-    "language": "yaml",
-    "chunk_index": 0,
-    "content": "name: Bug Report\ndescription: Report a bug in World Monitor\nlabels: [\"bug\"]\nbody:\n  - type: markdown\n    attributes:\n      value: |\n        Thanks for taking the time to report a bug! Please fill out the sections below so we can reproduce and fix it.\n\n  - type: dropdown\n    id: variant\n    attributes:\n      label: Variant\n      description: Which variant are you using?\n      options:\n        - worldmonitor.app (Full / Geopolitical)\n        - tech.worldmonitor.app (Tech / Startup)\n        - finance.worldmonitor.app (Finance)\n        - Desktop app (Windows)\n        - Desktop app (macOS)\n        - Desktop app (Linux)\n    validations:\n      required: true\n\n  - type: dropdown\n    id: area\n    attributes:\n      label: Affected area\n      description: Which part of the app is affected?\n      options:\n        - Map / Globe\n        - News panels / RSS feeds\n        - AI Insights / World Brief\n        - Market Radar / Crypto\n        - Service Status\n        - Trending Keywords\n        - Country Brief pages\n        - Live video streams\n        - Desktop app (Tauri)\n        - Settings / API keys\n        - Settings / LLMs (Ollama, Groq, OpenRouter)\n        - Live webcams\n        - Other\n    validations:\n      required: true\n\n  - type: textarea\n    id: description\n    attributes:\n      label: Bug description\n      description: A clear description of what the bug is.\n      placeholder: Describe the bug...\n    validations:\n      required: true\n\n  - type: textarea\n    id: steps\n    attributes:\n      label: Steps to reproduce\n      description: Steps to reproduce the behavior.\n      placeholder: |\n        1. Go to '...'\n        2. Click on '...'\n        3. Scroll down to '...'\n        4. See error\n    validations:\n      required: true\n\n  - type: textarea\n    id: expected\n    attributes:\n      label: Expected behavior\n      description: What you expected to happen.\n    validations:\n      required: true\n\n  - type: textarea\n    id: screenshots\n    attributes:\n      label: Screenshots / Console errors\n      description: If applicable, add screenshots or paste browser console errors.\n\n  - type: input\n    id: browser\n    attributes:\n      label: Browser & OS\n      description: e.g. Chrome 120 on Windows 11, Safari 17 on macOS Sonoma\n      placeholder: Chrome 120 on Windows 11",
-    "tags": [
-      "ai",
-      "api",
-      "config",
-      "desktop",
-      "finance",
-      "maps",
-      "news",
-      "testing"
-    ],
-    "char_count": 2292
-  },
-  {
-    "chunk_id": "chunk_00031",
     "file_path": "AGENTS.md",
     "module": "documentation",
     "language": "markdown",
@@ -31,25 +12,24 @@
     "char_count": 94
   },
   {
-    "chunk_id": "chunk_00261",
-    "file_path": "api/_api-key.js",
+    "chunk_id": "chunk_00159",
+    "file_path": "api/_mcp-grant-hmac.ts",
     "module": "api",
-    "language": "javascript",
+    "language": "typescript",
     "chunk_index": 0,
-    "content": "import { isSessionTokenShape, validateSessionToken } from './_session.js';\nconst DESKTOP_ORIGIN_PATTERNS = [\n  /^https?:\\/\\/tauri\\.localhost(:\\d+)?$/,\n  /^https?:\\/\\/[a-z0-9-]+\\.tauri\\.localhost(:\\d+)?$/i,\n  /^tauri:\\/\\/localhost$/,\n  /^asset:\\/\\/localhost$/,\n];\nfunction isDesktopOrigin(origin) {\n  return Boolean(origin) && DESKTOP_ORIGIN_PATTERNS.some(p => p.test(origin));\n}\nfunction isValidEnterpriseKey(key) {\n  if (!key) return false;\n  const validKeys = (process.env.WORLDMONITOR_VALID_KEYS || '').split(',').filter(Boolean);\n  return validKeys.includes(key);\n}\n\n// Note: HTTP headers like Origin / Referer / Sec-Fetch-Site are entirely\n// client-controlled at the wire level (see issue #3541 / closed PR #3554).\n// Trusting any of them as a \"this is a real browser\" signal is forgeable by\n// curl in one line. The previous Referer-origin fallback and Origin-pattern\n// no-key trust path are both gone. Browsers now authenticate via:\n//   1. A short-lived wms_-prefixed session token (HMAC-signed by /api/wm-session).\n//      Kind: 'session'. Anonymous; satisfies basic gate, but downstream\n//      entitlement / premium checks must STILL run (a session token is freely\n//      mintable by anyone who can hit /api/wm-session — it is NOT proof of a\n//      paying user). Rejected when forceKey=true.\n//   2. A wm_-prefixed user API key (validated against the user-key table by gateway).\n//      Kind: 'user'. Returns required:true/valid:false here so the gateway's\n//      fallback at server/gateway.ts:~440 triggers validateUserApiKey().\n//   3. An enterprise key (WORLDMONITOR_VALID_KEYS). Kind: 'enterprise'. The\n//      ONLY kind that bypasses entitlement checks (operator-issued).\n// Tauri desktop continues to authenticate via enterprise key.\n//\n// Async because session validation uses Web Crypto (crypto.subtle.sign).\n// All call sites await this — see grep for migration history.",
+    "content": "/**\n * HMAC sign / verify helpers for the Pro-MCP cross-subdomain grant token.\n *\n * Used by:\n *   - U3 `api/internal/mcp-grant-mint.ts` — signs `{userId, nonce, exp}`\n *     after a Clerk-authenticated Pro user clicks \"Authorize\" on the apex\n *     consent page, returns a redirect URL whose `grant=` query parameter\n *     carries the signed payload.\n *   - U5 `api/oauth/authorize-pro.ts` — verifies the grant on the api\n *     subdomain before consuming the matching `mcp-grant:<nonce>` Redis\n *     one-shot and issuing the OAuth code.\n *\n * Token wire format (load-bearing — U3 and U5 MUST agree):\n *\n *   <base64url(payloadJson)>.<base64url(sigBytes)>\n *\n *   payloadJson = JSON.stringify({ userId: string, nonce: string, exp: number })\n *   sigBytes    = HMAC-SHA-256(secret, UTF-8 bytes of payloadJson)\n *\n * The signature is computed over the *exact JSON bytes* the verifier will\n * read after base64url-decoding — NOT over a re-serialised object. This\n * makes verification independent of JSON key ordering, whitespace, or\n * future field additions: whatever bytes were signed are exactly the\n * bytes verified. Same approach as the JWS compact serialisation pattern.\n *\n * `exp` is absolute epoch milliseconds (Date.now() + 5 * 60 * 1000 at\n * mint time). Verifier compares against Date.now(); mint-time clock skew\n * is bounded by the Redis nonce TTL anyway.\n *\n * Secret env: MCP_PRO_GRANT_HMAC_SECRET (32-byte+ random, base64 OK).\n * Missing env throws — handlers MUST surface this as 500\n * `CONFIGURATION_ERROR` (NOT 401/403, which would let an attacker\n * confuse \"missing secret in prod\" with \"expired grant\").\n *\n * Edge-runtime safe: uses Web Crypto API only. No node:crypto imports.\n */\nconst ENC = new TextEncoder();const DEC = new TextDecoder();\nexport interface GrantPayload {\n  userId: string;\n  nonce: string;\n  /** Absolute epoch milliseconds. */\n  exp: number;\n}\nexport class GrantConfigError extends Error {\n  constructor(message: string) {\n    super(message);\n    this.name = 'GrantConfigError';\n  }\n}\nfunction base64UrlEncode(bytes: Uint8Array): string {\n  let bin = '';\n  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);\n  return btoa(bin).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');\n}\nfunction base64UrlDecode(s: string): Uint8Array {\n  const pad = s.length % 4 === 0 ? '' : '='.repeat(4 - (s.length % 4));\n  const b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/');\n  const bin = atob(b64);\n  const out = new Uint8Array(bin.length);\n  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);\n  return out;\n}\nasync function importHmacKey(secret: string): Promise<CryptoKey> {\n  return crypto.subtle.importKey(\n    'raw',\n    ENC.encode(secret),\n    { name: 'HMAC', hash: 'SHA-256' },\n    false,\n    ['sign', 'verify'],\n  );\n}\n\n/** Reads the env var. Throws GrantConfigError if missing/empty. */",
     "tags": [
       "ai",
       "api",
       "auth",
+      "caching",
       "config",
-      "desktop",
-      "finance",
-      "testing"
+      "finance"
     ],
-    "char_count": 1895
+    "char_count": 2884
   },
   {
-    "chunk_id": "chunk_00618",
+    "chunk_id": "chunk_00321",
     "file_path": "blog-site/src/content/blog/ai-powered-intelligence-without-the-cloud.md",
     "module": "frontend",
     "language": "markdown",
@@ -62,89 +42,72 @@
     "char_count": 1221
   },
   {
-    "chunk_id": "chunk_01060",
-    "file_path": "consumer-prices-core/tests/unit/matcher.test.ts",
-    "module": "testing",
-    "language": "typescript",
+    "chunk_id": "chunk_00513",
+    "file_path": "compound-engineering.local.md",
+    "module": "root",
+    "language": "markdown",
     "chunk_index": 0,
-    "content": "import { describe, it, expect } from 'vitest';\nimport { scoreMatch, bestMatch } from '../../src/matchers/canonical.js';\nimport type { CanonicalProduct } from '../../src/db/models.js';\nconst baseCanonical: CanonicalProduct = {\n  id: 'c1',\n  canonicalName: 'Basmati Rice 1kg',\n  brandNorm: 'Tilda',\n  category: 'rice',\n  variantNorm: null,\n  sizeValue: 1000,\n  sizeUnit: 'g',\n  baseQuantity: 1000,\n  baseUnit: 'g',\n  active: true,\n  createdAt: new Date(),\n};\n\ndescribe('scoreMatch', () => {\n  it('gives high score for exact brand+category+size match', () => {\n    const result = scoreMatch(\n      { rawTitle: 'Tilda Basmati Rice 1kg', rawBrand: 'Tilda', rawSizeText: '1kg', categoryText: 'rice' },\n      baseCanonical,\n    );\n    expect(result.score).toBeGreaterThanOrEqual(85);\n    expect(result.status).toBe('auto');\n  });\n\n  it('gives review score for partial match (no brand)', () => {\n    const result = scoreMatch(\n      { rawTitle: 'Basmati Rice 1kg', rawBrand: null, rawSizeText: '1kg', categoryText: 'rice' },\n      baseCanonical,\n    );\n    expect(result.score).toBeGreaterThanOrEqual(50);\n  });\n\n  it('rejects clearly wrong product', () => {\n    const result = scoreMatch(\n      { rawTitle: 'Sunflower Oil 2L', rawBrand: 'Generic', rawSizeText: '2L', categoryText: 'oil' },\n      baseCanonical,\n    );\n    expect(result.status).toBe('reject');\n  });\n});\n\ndescribe('bestMatch', () => {\n  it('returns null when no candidates', () => {\n    expect(bestMatch({ rawTitle: 'Eggs 12 Pack' }, [])).toBeNull();\n  });\n\n  it('returns best scoring non-reject match', () => {\n    const result = bestMatch(\n      { rawTitle: 'Tilda Basmati Rice 1kg', rawBrand: 'Tilda', rawSizeText: '1kg', categoryText: 'rice' },\n      [baseCanonical],\n    );\n    expect(result?.canonicalProductId).toBe('c1');\n    expect(result?.score).toBeGreaterThanOrEqual(85);\n  });\n});",
+    "content": "---\nreview_agents:\n  - compound-engineering:review:kieran-typescript-reviewer\n  - compound-engineering:review:security-sentinel\n  - compound-engineering:review:performance-oracle\n  - compound-engineering:review:architecture-strategist\n  - compound-engineering:review:code-simplicity-reviewer\n---",
+    "tags": [
+      "documentation"
+    ],
+    "char_count": 295
+  },
+  {
+    "chunk_id": "chunk_00515",
+    "file_path": "consumer-prices-core/migrations/001_initial.sql",
+    "module": "database",
+    "language": "sql",
+    "chunk_index": 0,
+    "content": "-- Consumer Prices Core: Initial Schema\n-- Run: psql $DATABASE_URL < migrations/001_initial.sql\n\nCREATE EXTENSION IF NOT EXISTS \"pgcrypto\";\n\n-- ─── Retailers ────────────────────────────────────────────────────────────────\n\nCREATE TABLE retailers (\n  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  slug          VARCHAR(64) NOT NULL UNIQUE,\n  name          VARCHAR(128) NOT NULL,\n  market_code   CHAR(2) NOT NULL,\n  country_code  CHAR(2) NOT NULL,\n  currency_code CHAR(3) NOT NULL,\n  adapter_key   VARCHAR(32) NOT NULL DEFAULT 'generic',\n  base_url      TEXT NOT NULL,\n  active        BOOLEAN NOT NULL DEFAULT TRUE,\n  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);\n\nCREATE TABLE retailer_targets (\n  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  retailer_id   UUID NOT NULL REFERENCES retailers(id) ON DELETE CASCADE,\n  target_type   VARCHAR(32) NOT NULL CHECK (target_type IN ('category_url','product_url','search_query')),\n  target_ref    TEXT NOT NULL,\n  category_slug VARCHAR(64) NOT NULL,\n  enabled       BOOLEAN NOT NULL DEFAULT TRUE,\n  last_scraped_at TIMESTAMPTZ\n);\n\n-- ─── Products ─────────────────────────────────────────────────────────────────\n\nCREATE TABLE canonical_products (\n  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  canonical_name VARCHAR(256) NOT NULL,\n  brand_norm     VARCHAR(128),\n  category       VARCHAR(64) NOT NULL,\n  variant_norm   VARCHAR(128),\n  size_value     NUMERIC(12,4),\n  size_unit      VARCHAR(16),\n  base_quantity  NUMERIC(12,4),\n  base_unit      VARCHAR(16),\n  active         BOOLEAN NOT NULL DEFAULT TRUE,\n  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  UNIQUE (canonical_name, brand_norm, category, variant_norm, size_value, size_unit)\n);\n\nCREATE TABLE retailer_products (\n  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  retailer_id         UUID NOT NULL REFERENCES retailers(id) ON DELETE CASCADE,\n  retailer_sku        VARCHAR(128),\n  canonical_product_id UUID REFERENCES canonical_products(id),\n  source_url          TEXT NOT NULL,\n  raw_title           TEXT NOT NULL,\n  raw_brand           TEXT,\n  raw_size_text       TEXT,\n  image_url           TEXT,\n  category_text       TEXT,\n  first_seen_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  last_seen_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  active              BOOLEAN NOT NULL DEFAULT TRUE,\n  UNIQUE (retailer_id, source_url)\n);\n\nCREATE INDEX idx_retailer_products_retailer ON retailer_products(retailer_id);\nCREATE INDEX idx_retailer_products_canonical ON retailer_products(canonical_product_id) WHERE canonical_product_id IS NOT NULL;\n\n-- ─── Observations ─────────────────────────────────────────────────────────────\n\nCREATE TABLE scrape_runs (\n  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  retailer_id       UUID NOT NULL REFERENCES retailers(id),\n  started_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  finished_at       TIMESTAMPTZ,\n  status            VARCHAR(16) NOT NULL DEFAULT 'running'\n                    CHECK (status IN ('running','completed','failed','partial')),\n  trigger_type      VARCHAR(16) NOT NULL DEFAULT 'scheduled'",
     "tags": [
       "ai",
+      "finance"
+    ],
+    "char_count": 3196
+  },
+  {
+    "chunk_id": "chunk_03129",
+    "file_path": "proto/sebuf/http/annotations.proto",
+    "module": "api_contracts",
+    "language": "protobuf",
+    "chunk_index": 0,
+    "content": "syntax = \"proto3\";\n\npackage sebuf.http;\n\nimport \"google/protobuf/descriptor.proto\";\n\noption go_package = \"github.com/SebastienMelki/sebuf/http;http\";\n\n// HttpMethod specifies the HTTP verb for an RPC method\nenum HttpMethod {\n  // Unspecified defaults to POST for backward compatibility\n  HTTP_METHOD_UNSPECIFIED = 0;\n  HTTP_METHOD_GET = 1;\n  HTTP_METHOD_POST = 2;\n  HTTP_METHOD_PUT = 3;\n  HTTP_METHOD_DELETE = 4;\n  HTTP_METHOD_PATCH = 5;\n}\n\n// HttpConfig defines HTTP-specific configuration for an RPC method\nmessage HttpConfig {\n  // The HTTP path for this method (supports path variables like /users/{id})\n  string path = 1;\n\n  // The HTTP method (GET, POST, PUT, DELETE, PATCH). Defaults to POST if unspecified.\n  HttpMethod method = 2;\n}\n\n// Extension for method options\nextend google.protobuf.MethodOptions {\n  HttpConfig config = 50003;\n}\n\n// ServiceConfig defines HTTP-specific configuration for an entire service\nmessage ServiceConfig {\n  // Base path prefix for all methods in this service\n  string base_path = 1;\n}\n\n// Extension for service options\nextend google.protobuf.ServiceOptions {\n  ServiceConfig service_config = 50004;\n}\n\n// FieldExamples defines example values for a field\nmessage FieldExamples {\n  // List of example values for this field\n  repeated string values = 1;\n}\n\n// QueryConfig defines query parameter configuration for a message field\nmessage QueryConfig {\n  // The query parameter name in the URL (e.g., \"page_size\" for ?page_size=10)\n  string name = 1;\n\n  // Whether this query parameter is required\n  bool required = 2;\n}\n\n// Int64Encoding specifies how int64 fields should be encoded in generated TypeScript.\n// By default, int64 fields generate as `string` for JSON safety. When set to\n// INT64_ENCODING_NUMBER, the field generates as `number` instead -- suitable for\n// values that fit within Number.MAX_SAFE_INTEGER (e.g., Unix epoch milliseconds).\nenum Int64Encoding {\n  // Unspecified -- use default behavior (string).\n  INT64_ENCODING_UNSPECIFIED = 0;\n  // Encode as string (default JSON behavior for int64).\n  INT64_ENCODING_STRING = 1;\n  // Encode as number -- only use for values within Number.MAX_SAFE_INTEGER.\n  INT64_ENCODING_NUMBER = 2;\n}\n\n// Extension for field-level options\nextend google.protobuf.FieldOptions {\n  // Example values for documentation/OpenAPI\n  FieldExamples field_examples = 50007;\n\n  // Query parameter configuration for a field\n  QueryConfig query = 50008;\n\n  // Mark a repeated field for unwrapping when parent message is a map value.\n  // When set to true on a repeated field, and the message containing this field\n  // is used as a map value, the JSON serialization will collapse the wrapper\n  // to just the unwrapped field's array value.\n  // Constraints: Only valid on repeated fields, only one per message.\n  bool unwrap = 50009;\n\n  // Specify how an int64 field should be encoded in generated TypeScript code.\n  // Use INT64_ENCODING_NUMBER for timestamp fields (Unix epoch milliseconds)\n  // that safely fit within JavaScript's Number.MAX_SAFE_INTEGER.\n  Int64Encoding int64_encoding = 50010;\n}",
+    "tags": [
+      "ai",
+      "api",
+      "api_contracts",
+      "config",
+      "maps",
       "testing"
     ],
-    "char_count": 1852
+    "char_count": 3073
   },
   {
-    "chunk_id": "chunk_07618",
-    "file_path": "scripts/shared/ai-tokens.json",
-    "module": "shared",
-    "language": "json",
+    "chunk_id": "chunk_03441",
+    "file_path": "scripts/nixpacks.toml",
+    "module": "scripts",
+    "language": "toml",
     "chunk_index": 0,
-    "content": "{\n  \"ids\": [\"bittensor\",\"render-token\",\"fetch-ai\",\"akash-network\",\"ocean-protocol\",\"singularitynet\",\"grass\",\"virtual-protocol\",\"ai16z\",\"griffain\"],\n  \"meta\": {\n    \"bittensor\": { \"name\": \"Bittensor\", \"symbol\": \"TAO\" },\n    \"render-token\": { \"name\": \"Render\", \"symbol\": \"RENDER\" },\n    \"fetch-ai\": { \"name\": \"Fetch.ai\", \"symbol\": \"FET\" },\n    \"akash-network\": { \"name\": \"Akash Network\", \"symbol\": \"AKT\" },\n    \"ocean-protocol\": { \"name\": \"Ocean Protocol\", \"symbol\": \"OCEAN\" },\n    \"singularitynet\": { \"name\": \"SingularityNET\", \"symbol\": \"AGIX\" },\n    \"grass\": { \"name\": \"Grass\", \"symbol\": \"GRASS\" },\n    \"virtual-protocol\": { \"name\": \"Virtuals Protocol\", \"symbol\": \"VIRTUAL\" },\n    \"ai16z\": { \"name\": \"ai16z\", \"symbol\": \"AI16Z\" },\n    \"griffain\": { \"name\": \"Griffain\", \"symbol\": \"GRIFFAIN\" }\n  },\n  \"coinpaprika\": {\n    \"bittensor\": \"tao-bittensor\",\n    \"fetch-ai\": \"fet-fetch-ai\",\n    \"akash-network\": \"akt-akash-network\",\n    \"ocean-protocol\": \"ocean-ocean-protocol\",\n    \"singularitynet\": \"agix-singularitynet\"\n  }\n}",
+    "content": "[phases.setup]\n# aptPkgs = [\"curl\"]  — same workaround as root nixpacks.toml; see comment there.\ncmds = [\"sudo apt-get update -o Acquire::AllowInsecureRepositories=false || true\", \"sudo apt-get install -y --no-install-recommends --fix-missing curl || echo 'apt curl install failed; curl may already be present'\"]\n\n[variables]\nNODE_OPTIONS = \"--dns-result-order=ipv4first\"",
     "tags": [
-      "ai",
-      "api"
+      "ai"
     ],
-    "char_count": 1018
+    "char_count": 371
   },
   {
-    "chunk_id": "chunk_10671",
-    "file_path": "src/generated/server/worldmonitor/aviation/v1/service_server.ts",
+    "chunk_id": "chunk_03442",
+    "file_path": "server/__tests__/entitlement-check.test.ts",
     "module": "server",
     "language": "typescript",
     "chunk_index": 0,
-    "content": "// Code generated by protoc-gen-ts-server. DO NOT EDIT.\n// source: worldmonitor/aviation/v1/service.proto\nexport interface ListAirportDelaysRequest {\n  pageSize: number;\n  cursor: string;\n  region: AirportRegion;\n  minSeverity: FlightDelaySeverity;\n}\nexport interface ListAirportDelaysResponse {\n  alerts: AirportDelayAlert[];\n  pagination?: PaginationResponse;\n}\nexport interface AirportDelayAlert {\n  id: string;\n  iata: string;\n  icao: string;\n  name: string;\n  city: string;\n  country: string;\n  location?: GeoCoordinates;\n  region: AirportRegion;\n  delayType: FlightDelayType;\n  severity: FlightDelaySeverity;\n  avgDelayMinutes: number;\n  delayedFlightsPct: number;\n  cancelledFlights: number;\n  totalFlights: number;\n  reason: string;\n  source: FlightDelaySource;\n  updatedAt: number;\n}\nexport interface GeoCoordinates {\n  latitude: number;\n  longitude: number;\n}\nexport interface PaginationResponse {\n  nextCursor: string;\n  totalCount: number;\n}\nexport interface GetAirportOpsSummaryRequest {\n  airports: string[];\n}\nexport interface GetAirportOpsSummaryResponse {\n  summaries: AirportOpsSummary[];\n  cacheHit: boolean;\n}\nexport interface AirportOpsSummary {\n  iata: string;\n  icao: string;\n  name: string;\n  timezone: string;\n  delayPct: number;\n  avgDelayMinutes: number;\n  cancellationRate: number;\n  totalFlights: number;\n  closureStatus: boolean;\n  notamFlags: string[];\n  severity: FlightDelaySeverity;\n  topDelayReasons: string[];\n  source: string;\n  updatedAt: number;\n}\nexport interface ListAirportFlightsRequest {\n  airport: string;\n  direction: FlightDirection;\n  limit: number;\n}\nexport interface ListAirportFlightsResponse {\n  flights: FlightInstance[];\n  totalAvailable: number;\n  source: string;\n  updatedAt: number;\n}\nexport interface FlightInstance {\n  flightNumber: string;\n  date: string;\n  operatingCarrier?: Carrier;\n  origin?: AirportRef;\n  destination?: AirportRef;\n  scheduledDeparture: number;\n  estimatedDeparture: number;\n  actualDeparture: number;\n  scheduledArrival: number;\n  estimatedArrival: number;\n  actualArrival: number;\n  status: FlightInstanceStatus;\n  delayMinutes: number;\n  cancelled: boolean;\n  diverted: boolean;\n  gate: string;\n  terminal: string;\n  aircraftIcao24: string;\n  aircraftType: string;\n  codeshareFlightNumbers: string[];\n  source: string;\n  updatedAt: number;\n}\nexport interface Carrier {\n  iataCode: string;\n  icaoCode: string;\n  name: string;\n}\nexport interface AirportRef {\n  iata: string;\n  icao: string;\n  name: string;\n  timezone: string;\n}\nexport interface GetCarrierOpsRequest {\n  airports: string[];\n  minFlights: number;\n}\nexport interface GetCarrierOpsResponse {\n  carriers: CarrierOpsSummary[];\n  source: string;\n  updatedAt: number;\n}\nexport interface CarrierOpsSummary {\n  carrier?: Carrier;\n  airport: string;\n  totalFlights: number;\n  delayedCount: number;\n  cancelledCount: number;\n  avgDelayMinutes: number;\n  delayPct: number;\n  cancellationRate: number;\n  updatedAt: number;\n}\nexport interface GetFlightStatusRequest {\n  flightNumber: string;\n  date: string;\n  origin: string;\n}\nexport interface GetFlightStatusResponse {\n  flights: FlightInstance[];\n  source: string;\n  cacheHit: boolean;\n}",
+    "content": "// @vitest-environment node\n\n/**\n * Unit tests for gateway entitlement check logic.\n *\n * Mocking strategy: Controls the Redis mock return value to steer what\n * getEntitlements returns — no dependency injection needed. Since CONVEX_SITE_URL\n * is not set in most tests, the Convex fallback is skipped and getCachedJson is\n * the sole source of entitlement data.\n *\n * Per-file @vitest-environment node override avoids edge-runtime's missing\n * process.env for these helpers.\n */\n\nimport { describe, test, expect, vi } from \"vitest\";\n\n// ---------------------------------------------------------------------------\n// Mock the Redis dependency so the module loads without a real Redis connection\n// ---------------------------------------------------------------------------\nvi.mock(\"../_shared/redis\", () => ({\n  getCachedJson: vi.fn().mockResolvedValue(null),\n  setCachedJson: vi.fn().mockResolvedValue(undefined),\n}));\n\nimport { getCachedJson } from \"../_shared/redis\";\nimport {\n  getRequiredTier,\n  checkEntitlement,\n} from \"../_shared/entitlement-check\";\n\n// ---------------------------------------------------------------------------\n// Helpers\n// ---------------------------------------------------------------------------\nconst FUTURE = Date.now() + 86400000 * 30;\nfunction makeRequest(\n  pathname: string,\n  headers: Record<string, string> = {},\n): Request {\n  return new Request(`https://worldmonitor.app${pathname}`, { headers });\n}",
     "tags": [
-      "ai",
-      "caching"
-    ],
-    "char_count": 3176
-  },
-  {
-    "chunk_id": "chunk_00001",
-    "file_path": ".github/ISSUE_TEMPLATE/config.yml",
-    "module": "root",
-    "language": "yaml",
-    "chunk_index": 0,
-    "content": "blank_issues_enabled: false\ncontact_links:\n  - name: Documentation\n    url: https://github.com/koala73/worldmonitor/blob/main/docs/DOCUMENTATION.md\n    about: Read the full documentation before opening an issue\n  - name: Discussions\n    url: https://github.com/koala73/worldmonitor/discussions\n    about: Ask questions and share ideas in Discussions",
-    "tags": [
-      "ai",
-      "api"
-    ],
-    "char_count": 349
-  },
-  {
-    "chunk_id": "chunk_00002",
-    "file_path": ".github/ISSUE_TEMPLATE/feature_request.yml",
-    "module": "root",
-    "language": "yaml",
-    "chunk_index": 0,
-    "content": "name: Feature Request\ndescription: Suggest a new feature or improvement\nlabels: [\"enhancement\"]\nbody:\n  - type: markdown\n    attributes:\n      value: |\n        Have an idea for World Monitor? We'd love to hear it!\n\n  - type: dropdown\n    id: area\n    attributes:\n      label: Feature area\n      description: Which area does this feature relate to?\n      options:\n        - Map / Globe / Data layers\n        - News panels / RSS feeds\n        - AI / Intelligence analysis\n        - Market data / Crypto\n        - Desktop app\n        - UI / UX\n        - API / Backend\n        - Other\n    validations:\n      required: true\n\n  - type: textarea\n    id: description\n    attributes:\n      label: Description\n      description: A clear description of the feature you'd like.\n      placeholder: I'd like to see...\n    validations:\n      required: true\n\n  - type: textarea\n    id: problem\n    attributes:\n      label: Problem it solves\n      description: What problem does this feature address? What's the use case?\n      placeholder: This would help with...\n    validations:\n      required: true\n\n  - type: textarea\n    id: alternatives\n    attributes:\n      label: Alternatives considered\n      description: Have you considered any alternative solutions or workarounds?\n\n  - type: textarea\n    id: context\n    attributes:\n      label: Additional context\n      description: Any mockups, screenshots, links, or references that help illustrate the idea.",
-    "tags": [
-      "ai",
       "api",
-      "desktop",
-      "finance",
-      "maps",
-      "news"
+      "caching",
+      "config",
+      "testing"
     ],
-    "char_count": 1441
-  },
-  {
-    "chunk_id": "chunk_00003",
-    "file_path": ".github/ISSUE_TEMPLATE/new_data_source.yml",
-    "module": "root",
-    "language": "yaml",
-    "chunk_index": 0,
-    "content": "name: New Data Source\ndescription: Suggest a new RSS feed, API, or map layer\nlabels: [\"data-source\"]\nbody:\n  - type: markdown\n    attributes:\n      value: |\n        World Monitor aggregates 100+ feeds and data layers. Suggest a new one!\n\n  - type: dropdown\n    id: type\n    attributes:\n      label: Source type\n      description: What kind of data source is this?\n      options:\n        - RSS / News feed\n        - API integration\n        - Map layer (geospatial data)\n        - Live video stream\n        - Status page\n        - Other\n    validations:\n      required: true\n\n  - type: dropdown\n    id: variant\n    attributes:\n      label: Target variant\n      description: Which variant should this appear in?\n      options:\n        - Full (Geopolitical)\n        - Tech (Startup)\n        - Finance\n        - All variants\n    validations:\n      required: true\n\n  - type: input\n    id: source-name\n    attributes:\n      label: Source name\n      description: Name of the source or organization.\n      placeholder: e.g. RAND Corporation, CoinDesk, USGS\n    validations:\n      required: true\n\n  - type: input\n    id: url\n    attributes:\n      label: Feed / API URL\n      description: Direct URL to the RSS feed, API endpoint, or data source.\n      placeholder: https://example.com/rss\n    validations:\n      required: true\n\n  - type: textarea\n    id: description\n    attributes:\n      label: Why add this source?\n      description: What value does this source bring? What does it cover that existing sources don't?\n      placeholder: This source provides coverage of...\n    validations:\n      required: true\n\n  - type: textarea\n    id: notes\n    attributes:\n      label: Additional notes\n      description: Any details about rate limits, authentication requirements, data format, or category placement.",
-    "tags": [
-      "ai",
-      "api",
-      "auth",
-      "finance",
-      "maps",
-      "news"
-    ],
-    "char_count": 1796
+    "char_count": 1442
   }
 ]

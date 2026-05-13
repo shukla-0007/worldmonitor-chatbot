@@ -1,0 +1,7 @@
+{
+  "total_chunks": 0,
+  "embedding_model": "text-embedding-004",
+  "vector_dimensions": 768,
+  "db_file": "/Users/sigma-7/Documents/VS-Code/MavenVista Project/VSCode/worldmonitor-chatbot/knowledge.duckdb",
+  "modules": {}
+}
