@@ -1,25 +1,24 @@
-"""
-chat_api.py — Phase 4
-FastAPI server wrapping the RAG pipeline with session memory and streaming.
-"""
+# chat_api.py — Phase 4/5
+# FastAPI server wrapping RAG with per-profile sessions and streaming.
 
 import os
-import uuid
 import json
 from pathlib import Path
+from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from session_store import SessionStore
-from rag_pipeline import ask
+from rag_pipeline import ask, PERSONAS, DEFAULT_PERSONA
 
-# ── App ────────────────────────────────────────────────────────────────
-app = FastAPI(title="WorldMonitor Chatbot API")
+BASE_DIR = Path(__file__).resolve().parent.parent  # project root
+app = FastAPI()
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -27,100 +26,151 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-store = SessionStore()
+# Static files (index.html + app.js)
+app.mount(
+    "/static",
+    StaticFiles(directory=BASE_DIR),
+    name="static",
+)
 
-# ── Models ─────────────────────────────────────────────────────────────
+
+@app.get("/")
+async def root():
+    index_path = BASE_DIR / "index.html"
+    if not index_path.exists():
+        return {"error": "index.html does not exist at project root"}
+    return FileResponse(index_path)
+
+
+# --- Models / store --------------------------------------------------------
+
 class ChatRequest(BaseModel):
     question: str
     session_id: str | None = None
+    profile: str | None = None  # "product" | "tech" | "support" | "sales"
 
-# ── Routes ─────────────────────────────────────────────────────────────
+
+store = SessionStore()
+
+
+def normalize_profile(profile: str | None) -> str:
+    key = (profile or "").strip().lower()
+    if key in PERSONAS:
+        return key
+    return DEFAULT_PERSONA
+
+
+# --- Plain /chat endpoint --------------------------------------------------
+
 @app.post("/chat")
 async def chat(req: ChatRequest):
-    session = store.get_or_create(req.session_id)
-    history = session.get_history()
+    profile = normalize_profile(req.profile)
+    session = store.get_or_create(profile=profile, session_id=req.session_id)
 
-    if history:
-        history_text = "\n".join(
-            f"{m['role'].upper()}: {m['content']}" for m in history[-6:]
-        )
-        full_query = f"Conversation so far:\n{history_text}\n\nNew question: {req.question}"
-    else:
-        full_query = req.question
+    session.add("user", req.question)
 
-    result = ask(full_query)
-    session.add("user",      req.question)
+    result = ask(
+        query=req.question,
+        top_k=7,
+        verbose=False,
+        persona=profile,
+    )
+
     session.add("assistant", result["answer"])
 
     return {
-        "answer":     result["answer"],
-        "session_id": session.session_id,
-        "sources":    [c["file_path"] for c in result["sources"]],
-        "model":      result["model"],
+        "answer": result["answer"],
+        "sources": result["sources"],
+        "session_id": session.id,
+        "profile": profile,
+        "model": result["model"],
     }
-    
+
+
+# --- Streaming /chat/stream endpoint (SSE) --------------------------------
+
+async def stream_events(question: str, profile: str, session_id: str | None) -> AsyncGenerator[bytes, None]:
+    """
+    Simple pseudo-streaming: send one meta event for sources, then one event for answer.
+    You can later replace with true token streaming if you want.
+    """
+    session = store.get_or_create(profile=profile, session_id=session_id)
+    session.add("user", question)
+
+    result = ask(
+        query=question,
+        top_k=7,
+        verbose=False,
+        persona=profile,
+    )
+
+    session.add("assistant", result["answer"])
+
+    # meta event: sources + metadata
+    meta_payload = {
+        "type": "meta",
+        "session_id": session.id,
+        "profile": profile,
+        "model": result["model"],
+        "sources": result["sources"],
+    }
+    yield f"event: meta\ndata: {json.dumps(meta_payload)}\n\n".encode("utf-8")
+
+    # content event: full answer in one chunk
+    answer_payload = {
+        "type": "answer",
+        "content": result["answer"],
+    }
+    yield f"event: message\ndata: {json.dumps(answer_payload)}\n\n".encode("utf-8")
+
 
 @app.post("/chat/stream")
 async def chat_stream(req: ChatRequest):
-    session = store.get_or_create(req.session_id)
+    profile = normalize_profile(req.profile)
+    event_generator = stream_events(
+        question=req.question,
+        profile=profile,
+        session_id=req.session_id,
+    )
+    return StreamingResponse(
+        event_generator,
+        media_type="text/event-stream",
+    )
 
-    async def event_generator():
-        # Build a context-aware question from history
-        history = session.get_history()
-        if history:
-            history_text = "\n".join(
-                f"{m['role'].upper()}: {m['content']}" for m in history[-6:]
-            )
-            full_query = f"Conversation so far:\n{history_text}\n\nNew question: {req.question}"
-        else:
-            full_query = req.question
 
-        result  = ask(full_query)
-        sources = [c["file_path"] for c in result["sources"]]
-        answer  = result["answer"]
+# --- History and health ----------------------------------------------------
 
-        yield f"data: {json.dumps({'type': 'meta', 'session_id': session.session_id, 'sources': sources})}\n\n"
+@app.get("/history/{profile}/{session_id}")
+async def get_history(profile: str, session_id: str):
+    profile_key = normalize_profile(profile)
+    session = store.get(profile_key, session_id)
+    if not session:
+        return {"session_id": session_id, "profile": profile_key, "messages": []}
+    return session.to_dict()
 
-        words = answer.split(" ")
-        for i, word in enumerate(words):
-            chunk = word if i == 0 else " " + word
-            yield f"data: {json.dumps({'type': 'token', 'content': chunk})}\n\n"
 
-        session.add("user",      req.question)
-        session.add("assistant", answer)
-        yield f"data: {json.dumps({'type': 'done', 'full_answer': answer})}\n\n"
+@app.delete("/history/{profile}/{session_id}/clear")
+async def clear_history(profile: str, session_id: str):
+    profile_key = normalize_profile(profile)
+    store.clear(profile_key, session_id)
+    return {"ok": True}
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream") 
 
-@app.get("/health") 
+@app.get("/health")
 async def health():
+    store.cleanup_expired()
     return {
-        "status":          "ok",
-        "model":           os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite"),
-        "chunks_indexed":  7154,
-        "active_sessions": store.active_count, 
+        "status": "ok",
+        "active_sessions": store.active_count,
     }
 
-@app.get("/history/{session_id}")
-async def get_history(session_id: str):
-    history = store.get_history(session_id)
-    return {"session_id": session_id, "messages": history or []}
 
-@app.delete("/history/{session_id}/clear")
-async def clear_history(session_id: str):
-    store.clear(session_id)
-    return {"status": "cleared", "session_id": session_id}
-
-# ── Static / UI — MUST be last ─────────────────────────────────────────
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-@app.get("/")
-async def serve_ui():
-    return FileResponse(BASE_DIR / "index.html")
-
-app.mount("/static", StaticFiles(directory=str(BASE_DIR)), name="static")
-
-# ── Entry point ────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("chat_api:app", host="0.0.0.0", port=8000, reload=False) 
+
+    uvicorn.run(
+        "chat_api:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=False,
+    ) 

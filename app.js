@@ -1,150 +1,174 @@
 document.addEventListener("DOMContentLoaded", () => {
+  const chatWindow = document.getElementById("chat-window");
+  const questionEl = document.getElementById("question");
+  const sendBtn = document.getElementById("send-btn");
 
-const API_BASE = "http://localhost:8000";
-let sessionId = null;
-let isStreaming = false;
+  const profileToggle = document.getElementById("profile-toggle");
+  const profileMenu = document.getElementById("profile-menu");
+  const profileLabel = document.getElementById("profile-label");
 
-const chatWindow = document.getElementById("chat-window");
-const questionEl = document.getElementById("question");
-const sendBtn    = document.getElementById("send-btn");
-const clearBtn   = document.getElementById("clear-btn");
-const statusDot  = document.getElementById("status-dot");
+  let currentProfile = "product";
+  const sessionIds = {}; // profile -> sessionId
+  let isStreaming = false;
 
-async function checkHealth() { 
-  try {
-    const res = await fetch(`${API_BASE}/health`);
-    statusDot.classList.toggle("offline", !res.ok);
-  } catch { statusDot.classList.add("offline"); }
-}
-checkHealth();
-setInterval(checkHealth, 30000);
-
-questionEl.addEventListener("input", () => {
-  questionEl.style.height = "auto";
-  questionEl.style.height = Math.min(questionEl.scrollHeight, 140) + "px";
-});
-
-questionEl.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    handleSend();
+  function getSessionIdForProfile(profile) {
+    return sessionIds[profile] || null;
   }
-});
 
-sendBtn.addEventListener("click", handleSend);
-clearBtn.addEventListener("click", clearConversation);
+  function setSessionIdForProfile(profile, id) {
+    sessionIds[profile] = id;
+  }
 
-async function handleSend() {
-  const question = questionEl.value.trim();
-  if (!question || isStreaming) return;
-  hideEmptyState();
-  appendMessage("user", question);
-  questionEl.value = "";
-  questionEl.style.height = "auto";
-  setStreaming(true);
-  const { bubbleEl, sourcesEl } = appendAssistantPlaceholder();
-  try {
-    const response = await fetch(`${API_BASE}/chat/stream`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, ...(sessionId && { session_id: sessionId }) }),
-    });
-    if (!response.ok) { bubbleEl.textContent = `Error: ${response.status}`; setStreaming(false); return; }
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop();
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const raw = line.slice(6).trim();
-        if (!raw) continue;
-        let event;
-        try { event = JSON.parse(raw); } catch { continue; }
-        if (event.type === "meta") {
-          sessionId = event.session_id;
-          if (event.sources?.length) renderSources(sourcesEl, event.sources);
-        } else if (event.type === "token") {
-          const ind = bubbleEl.querySelector(".typing-indicator");
-          if (ind) ind.remove();
-          bubbleEl.textContent += event.content;
-          scrollToBottom();
+  // --- Profile dropup logic ----------------------------------------------
+
+  profileToggle.addEventListener("click", () => {
+    const isOpen = profileMenu.style.display === "block";
+    profileMenu.style.display = isOpen ? "none" : "block";
+  });
+
+  profileMenu.addEventListener("click", (e) => {
+    const opt = e.target.closest(".persona-option");
+    if (!opt) return;
+    const profile = opt.dataset.profile;
+    currentProfile = profile;
+    profileLabel.textContent = opt.textContent.trim();
+    profileMenu.style.display = "none";
+
+    // Clear visible messages when switching profile (history is separate)
+    chatWindow.innerHTML = "";
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!profileMenu.contains(e.target) && !profileToggle.contains(e.target)) {
+      profileMenu.style.display = "none";
+    }
+  });
+
+  // --- Chat helpers ------------------------------------------------------
+
+  function appendMessage(role, text) {
+    const div = document.createElement("div");
+    div.className = "message " + role;
+    div.textContent = text;
+    chatWindow.appendChild(div);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }
+
+  function appendSources(sources) {
+    if (!sources || !sources.length) return;
+    const div = document.createElement("div");
+    div.className = "sources";
+    const uniqueFiles = Array.from(new Set(sources.map((s) => s.file_path)));
+    div.textContent = "Sources: " + uniqueFiles.join(", ");
+    chatWindow.appendChild(div);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }
+
+  function setStreaming(val) {
+    isStreaming = val;
+    sendBtn.disabled = val;
+    questionEl.disabled = val;
+  }
+
+  // --- Send message (SSE) -----------------------------------------------
+
+  async function sendMessage() {
+    const text = questionEl.value.trim();
+    if (!text || isStreaming) return;
+
+    appendMessage("user", text);
+    questionEl.value = "";
+
+    const existingSession = getSessionIdForProfile(currentProfile);
+
+    const payload = {
+      question: text,
+      session_id: existingSession,
+      profile: currentProfile,
+    };
+
+    setStreaming(true);
+
+    try {
+      const resp = await fetch("/chat/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!resp.ok || !resp.body) {
+        appendMessage("assistant", "Error: failed to reach backend.");
+        setStreaming(false);
+        return;
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+      let assistantBuffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let sep;
+        while ((sep = buffer.indexOf("\n\n")) !== -1) {
+          const rawEvent = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          handleSSEChunk(rawEvent);
         }
       }
+
+      function handleSSEChunk(chunk) {
+        const lines = chunk.split("\n");
+        let eventType = "message";
+        let data = "";
+
+        for (const line of lines) {
+          if (line.startsWith("event:")) {
+            eventType = line.replace("event:", "").trim();
+          } else if (line.startsWith("data:")) {
+            data += line.replace("data:", "").trim();
+          }
+        }
+
+        if (!data) return;
+
+        try {
+          const parsed = JSON.parse(data);
+          if (eventType === "meta") {
+            if (parsed.session_id) {
+              setSessionIdForProfile(currentProfile, parsed.session_id);
+            }
+            if (parsed.sources) {
+              appendSources(parsed.sources);
+            }
+          } else if (eventType === "message") {
+            assistantBuffer += parsed.content || "";
+          }
+        } catch (err) {
+          console.error("Failed to parse SSE data", err, data);
+        }
+      }
+
+      if (assistantBuffer) {
+        appendMessage("assistant", assistantBuffer);
+      }
+    } catch (err) {
+      console.error(err);
+      appendMessage("assistant", "Error: " + String(err));
+    } finally {
+      setStreaming(false);
     }
-  } catch (err) { bubbleEl.textContent = `Connection error: ${err.message}`; }
-  setStreaming(false);
-  scrollToBottom();
-}
-
-async function clearConversation() {
-  if (sessionId) {
-    try { await fetch(`${API_BASE}/history/${sessionId}/clear`, { method: "DELETE" }); } catch {}
-    sessionId = null;
   }
-  chatWindow.innerHTML = "";
-  chatWindow.appendChild(createEmptyState());
-}
 
-function appendMessage(role, text) {
-  const msg = document.createElement("div");
-  msg.className = `message ${role}`;
-  const bubble = document.createElement("div");
-  bubble.className = "bubble";
-  bubble.textContent = text;
-  msg.appendChild(bubble);
-  chatWindow.appendChild(msg);
-  scrollToBottom();
-}
+  sendBtn.addEventListener("click", sendMessage);
 
-function appendAssistantPlaceholder() {
-  const msg = document.createElement("div");
-  msg.className = "message assistant";
-  const bubbleEl = document.createElement("div");
-  bubbleEl.className = "bubble";
-  const ind = document.createElement("div");
-  ind.className = "typing-indicator";
-  ind.innerHTML = "<span></span><span></span><span></span>";
-  bubbleEl.appendChild(ind);
-  const sourcesEl = document.createElement("div");
-  sourcesEl.className = "sources";
-  msg.appendChild(bubbleEl);
-  msg.appendChild(sourcesEl);
-  chatWindow.appendChild(msg);
-  scrollToBottom();
-  return { bubbleEl, sourcesEl };
-}
-
-function renderSources(container, sources) {
-  container.textContent = "Sources: ";
-  sources.forEach((src) => {
-    const tag = document.createElement("span");
-    tag.textContent = src.split("/").pop();
-    tag.title = src;
-    container.appendChild(tag);
+  questionEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
   });
-}
-
-function hideEmptyState() { document.getElementById("empty-state")?.remove(); }
-
-function createEmptyState() {
-  const div = document.createElement("div");
-  div.className = "empty-state";
-  div.id = "empty-state";
-  div.innerHTML = "<h2>Ask anything about WorldMonitor</h2><p>Answers are grounded in the WorldMonitor knowledge base.</p>";
-  return div;
-}
-
-function setStreaming(val) {
-  isStreaming = val;
-  sendBtn.disabled = val;
-  questionEl.disabled = val;
-}
-
-function scrollToBottom() { chatWindow.scrollTop = chatWindow.scrollHeight; }
-
-}); // end DOMContentLoaded 
+}); 

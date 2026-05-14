@@ -1,90 +1,80 @@
-"""
-session_store.py — Phase 4
-In-memory session manager. Stores conversation history per session.
-Session IDs are auto-generated UUIDs — never exposed to the user.
-"""
+# session_store.py — per-profile conversation memory
 
+import time
 import uuid
-from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from threading import Lock
-
-MAX_HISTORY   = 6      # last N turns (1 turn = 1 user msg + 1 assistant msg)
-SESSION_TTL   = 3600   # seconds before an idle session is purged (1 hour)
+from typing import List, Dict, Any, Tuple
 
 
 @dataclass
 class Message:
-    role: str       # "user" or "assistant"
+    role: str  # "user" or "assistant"
     content: str
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    ts: float = field(default_factory=time.time)
 
 
 @dataclass
 class Session:
-    session_id: str
-    messages: deque = field(default_factory=lambda: deque(maxlen=MAX_HISTORY * 2))
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    last_active: datetime = field(default_factory=datetime.utcnow)
+    id: str
+    profile: str
+    messages: List[Message] = field(default_factory=list)
+    created_at: float = field(default_factory=time.time)
+    last_used_at: float = field(default_factory=time.time)
+    ttl_seconds: int = 60 * 60  # 1 hour
 
     def add(self, role: str, content: str):
         self.messages.append(Message(role=role, content=content))
-        self.last_active = datetime.utcnow()
+        self.last_used_at = time.time()
 
-    def get_history(self) -> list[dict]:
-        return [{"role": m.role, "content": m.content} for m in self.messages]
-
+    @property
     def is_expired(self) -> bool:
-        return datetime.utcnow() - self.last_active > timedelta(seconds=SESSION_TTL)
+        return (time.time() - self.last_used_at) > self.ttl_seconds
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "profile": self.profile,
+            "messages": [
+                {"role": m.role, "content": m.content, "ts": m.ts}
+                for m in self.messages
+            ],
+            "created_at": self.created_at,
+            "last_used_at": self.last_used_at,
+        }
 
 
 class SessionStore:
+    """
+    Stores sessions keyed by (profile, session_id) so each profile
+    has its own independent conversation history.
+    """
+
     def __init__(self):
-        self._sessions: dict[str, Session] = {}
-        self._lock = Lock()
+        self._sessions: Dict[Tuple[str, str], Session] = {}
 
-    def get_or_create(self, session_id: str | None = None) -> Session:
-        """Return existing session or create a new one. Auto-generates ID if None."""
-        with self._lock:
-            if session_id and session_id in self._sessions:
-                session = self._sessions[session_id]
-                if not session.is_expired():
-                    return session
-            # Create new session
-            new_id = session_id or str(uuid.uuid4())
-            session = Session(session_id=new_id)
-            self._sessions[new_id] = session
-            return session
+    def _key(self, profile: str, session_id: str) -> Tuple[str, str]:
+        return (profile, session_id)
 
-    def clear(self, session_id: str) -> bool:
-        with self._lock:
-            if session_id in self._sessions:
-                self._sessions[session_id].messages.clear()
-                return True
-            return False
+    def get_or_create(self, profile: str, session_id: str | None = None) -> Session:
+        if not session_id:
+            session_id = uuid.uuid4().hex
 
-    def delete(self, session_id: str) -> bool:
-        with self._lock:
-            return self._sessions.pop(session_id, None) is not None
+        key = self._key(profile, session_id)
+        if key not in self._sessions:
+            self._sessions[key] = Session(id=session_id, profile=profile)
+        return self._sessions[key]
 
-    def get_history(self, session_id: str) -> list[dict] | None:
-        with self._lock:
-            s = self._sessions.get(session_id)
-            return s.get_history() if s else None
+    def get(self, profile: str, session_id: str) -> Session | None:
+        return self._sessions.get(self._key(profile, session_id))
 
-    def purge_expired(self):
-        """Remove idle sessions. Call periodically."""
-        with self._lock:
-            expired = [sid for sid, s in self._sessions.items() if s.is_expired()]
-            for sid in expired:
-                del self._sessions[sid]
-        return len(expired)
+    def clear(self, profile: str, session_id: str) -> None:
+        self._sessions.pop(self._key(profile, session_id), None)
+
+    def cleanup_expired(self) -> None:
+        to_delete = [k for k, s in self._sessions.items() if s.is_expired]
+        for k in to_delete:
+            del self._sessions[k]
 
     @property
     def active_count(self) -> int:
-        return len(self._sessions)
-
-
-# Singleton — shared across the whole app
-store = SessionStore()
+        return len(self._sessions) 

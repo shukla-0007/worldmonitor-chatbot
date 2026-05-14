@@ -2,61 +2,203 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>WorldMonitor Chatbot</title>
+  <title>WorldMonitor Codebase Chatbot</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f1117; color: #e1e4e8; height: 100dvh; display: flex; flex-direction: column; align-items: center; }
-    header { width: 100%; max-width: 760px; padding: 18px 20px 14px; border-bottom: 1px solid #21262d; display: flex; align-items: center; gap: 10px; }
-    header h1 { font-size: 1.05rem; font-weight: 600; color: #f0f6fc; }
-    header .dot { width: 8px; height: 8px; border-radius: 50%; background: #3fb950; flex-shrink: 0; }
-    header .dot.offline { background: #f85149; }
-    #chat-window { flex: 1; overflow-y: auto; width: 100%; max-width: 760px; padding: 24px 20px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
-    .message { display: flex; flex-direction: column; gap: 6px; max-width: 100%; }
-    .message.user { align-items: flex-end; }
-    .message.assistant { align-items: flex-start; }
-    .bubble { padding: 11px 15px; border-radius: 12px; font-size: 0.92rem; line-height: 1.6; white-space: pre-wrap; word-break: break-word; max-width: 88%; }
-    .message.user .bubble { background: #1f6feb; color: #fff; border-bottom-right-radius: 3px; }
-    .message.assistant .bubble { background: #161b22; border: 1px solid #30363d; border-bottom-left-radius: 3px; }
-    .sources { font-size: 0.75rem; color: #8b949e; padding: 0 4px; }
-    .sources span { display: inline-block; background: #21262d; border: 1px solid #30363d; border-radius: 4px; padding: 1px 6px; margin: 2px 2px 0 0; }
-    .typing-indicator span { display: inline-block; width: 6px; height: 6px; background: #8b949e; border-radius: 50%; margin: 0 2px; animation: blink 1.2s infinite; }
-    .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-    .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
-    @keyframes blink { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
-    #input-area { width: 100%; max-width: 760px; padding: 14px 20px 22px; border-top: 1px solid #21262d; }
-    #input-row { display: flex; gap: 10px; align-items: flex-end; background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 10px 14px; transition: border-color 0.15s; }
-    #input-row:focus-within { border-color: #58a6ff; }
-    #question { flex: 1; background: transparent; border: none; outline: none; color: #e1e4e8; font-size: 0.93rem; line-height: 1.5; resize: none; max-height: 140px; overflow-y: auto; font-family: inherit; }
-    #question::placeholder { color: #484f58; }
-    #send-btn { background: #1f6feb; border: none; border-radius: 8px; color: #fff; padding: 7px 14px; font-size: 0.88rem; font-weight: 500; cursor: pointer; flex-shrink: 0; transition: background 0.15s, opacity 0.15s; }
-    #send-btn:hover { background: #388bfd; }
-    #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    #clear-btn { display: block; margin: 8px auto 0; background: none; border: none; color: #484f58; font-size: 0.78rem; cursor: pointer; transition: color 0.15s; }
-    #clear-btn:hover { color: #8b949e; }
-    .empty-state { margin: auto; text-align: center; color: #484f58; }
-    .empty-state h2 { font-size: 1.3rem; font-weight: 600; color: #6e7681; margin-bottom: 8px; }
-    .empty-state p { font-size: 0.88rem; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      background: radial-gradient(circle at top, #202233 0, #05060a 55%, #010104 100%);
+      color: #f5f5f5;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: stretch;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 900px;
+      height: 100vh;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #00c853;
+      box-shadow: 0 0 10px rgba(0, 200, 83, 0.8);
+    }
+
+    .title {
+      font-weight: 600;
+      font-size: 18px;
+    }
+
+    .status-label {
+      font-size: 11px;
+      color: rgba(255,255,255,0.6);
+    }
+
+    .chat-window {
+      flex: 1;
+      border-radius: 16px;
+      background: rgba(5,6,12,0.9);
+      border: 1px solid rgba(255,255,255,0.06);
+      padding: 12px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .message {
+      max-width: 80%;
+      padding: 8px 10px;
+      border-radius: 10px;
+      font-size: 13px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+    }
+    .message.user {
+      align-self: flex-end;
+      background: #1c2440;
+    }
+    .message.assistant {
+      align-self: flex-start;
+      background: #13151e;
+    }
+
+    .sources {
+      font-size: 11px;
+      color: rgba(255,255,255,0.6);
+      margin-top: 4px;
+    }
+
+    .input-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-top: 6px;
+    }
+
+    .persona-selector {
+      position: relative;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+
+    .persona-btn {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 999px;
+      padding: 6px 10px;
+      color: #f5f5f5;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .persona-menu {
+      position: absolute;
+      bottom: 110%; /* dropup above the button */
+      left: 0;
+      background: #15171c;
+      border-radius: 10px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+      padding: 4px 0;
+      min-width: 200px;
+      display: none;
+      z-index: 20;
+    }
+
+    .persona-option {
+      padding: 6px 10px;
+      cursor: pointer;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+
+    .persona-option:hover {
+      background: rgba(255,255,255,0.06);
+    }
+
+    .input-row textarea {
+      flex: 1;
+      resize: none;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(0,0,0,0.7);
+      color: #eee;
+      padding: 8px 10px;
+      min-height: 40px;
+      max-height: 80px;
+      font-size: 13px;
+    }
+
+    .input-row button {
+      border-radius: 999px;
+      border: none;
+      padding: 8px 14px;
+      background: #2962ff;
+      color: white;
+      font-size: 13px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .input-row button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
   </style>
 </head>
 <body>
-<header>
-  <div class="dot" id="status-dot"></div>
-  <h1>WorldMonitor Chatbot</h1>
-</header>
-<div id="chat-window">
-  <div class="empty-state" id="empty-state">
-    <h2>Ask anything about WorldMonitor</h2>
-    <p>Answers are grounded in the WorldMonitor knowledge base.</p>
+  <div class="app">
+    <header>
+      <div class="status-dot"></div>
+      <div class="title">WorldMonitor Codebase Chatbot</div>
+      <span class="status-label">Connected</span>
+    </header>
+
+    <div id="chat-window" class="chat-window"></div>
+
+    <div class="input-row">
+      <div class="persona-selector">
+        <button id="profile-toggle" class="persona-btn">
+          Profile: <span id="profile-label">Product</span> ▲
+        </button>
+        <div id="profile-menu" class="persona-menu">
+          <div class="persona-option" data-profile="product">Product</div>
+          <div class="persona-option" data-profile="tech">Tech / Developer</div>
+          <div class="persona-option" data-profile="support">Support</div>
+          <div class="persona-option" data-profile="sales">Sales</div>
+        </div>
+      </div>
+
+      <textarea
+        id="question"
+        placeholder="Ask something about the worldmonitor GitHub codebase..."
+      ></textarea>
+
+      <button id="send-btn">Send</button>
+    </div>
   </div>
-</div>
-<div id="input-area">
-  <div id="input-row">
-    <textarea id="question" rows="1" placeholder="Ask a question…"></textarea>
-    <button id="send-btn">Send</button>
-  </div>
-  <button id="clear-btn">Clear conversation</button>
-</div>
-<script src="/static/app.js"></script>
+
+  <script src="/static/app.js"></script>
 </body>
-</html>
+</html> 
