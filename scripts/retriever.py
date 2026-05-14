@@ -38,8 +38,9 @@ def retrieve(query: str, top_k: int = TOP_K, db_path: str = DB_PATH) -> list[dic
     query_vec = embed_query(query)
 
     con = duckdb.connect(db_path) 
+    con.execute("INSTALL vss")
     con.execute("LOAD vss")
-    con.execute("SET hnsw_enable_experimental_persistence = true")
+    con.execute("SET hnsw_enable_experimental_persistence = true") 
 
     rows = con.execute(
         """
