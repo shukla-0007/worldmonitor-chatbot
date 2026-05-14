@@ -13,7 +13,7 @@ WORKDIR $HOME/app
 COPY --chown=user . .
 
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r scripts/requirements.txt
+    pip install --no-cache-dir -r requirements.txt
 
 EXPOSE 7860
 
