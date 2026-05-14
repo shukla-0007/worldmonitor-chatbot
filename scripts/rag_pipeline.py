@@ -10,7 +10,7 @@ from typing import List, Dict, Any
 
 import duckdb
 import google.generativeai as genai
-from retriever import retrieve  # this is the function that returns that list 
+from retriever import retrieve
 
 # --- Model config ----------------------------------------------------------
 
@@ -54,39 +54,20 @@ PERSONAS: Dict[str, Dict[str, str]] = {
 
 DEFAULT_PERSONA = "product"
 
-
 # --- DB / retrieval --------------------------------------------------------
 
 from pathlib import Path
 
-from pathlib import Path
-
-BASE_DIR = Path(__file__).resolve().parent.parent  # worldmonitor-chatbot root
-DB_PATH = os.getenv(
-    "RAG_DB_PATH",
-    str(BASE_DIR / "knowledge.duckdb"),
-)
-
+BASE_DIR = Path(__file__).resolve().parent.parent
+DB_PATH = os.getenv("RAG_DB_PATH", str(BASE_DIR / "knowledge.duckdb"))
 
 
 def get_conn():
-    return duckdb.connect(DB_PATH) 
+    return duckdb.connect(DB_PATH)
 
 
 def retrieve_chunks(query: str, top_k: int = 7) -> List[Dict[str, Any]]:
-    """
-    Retrieve top_k chunks using the existing retriever, which queries
-    the `embeddings` table in knowledge.duckdb and returns:
-      {
-        "chunk_id": ...,
-        "module": ...,
-        "file_path": ...,
-        "content": ...,
-        "score": float,
-      }
-    """
     results = retrieve(query=query, top_k=top_k)
-
     chunks: List[Dict[str, Any]] = []
     for r in results:
         chunks.append(
@@ -97,8 +78,7 @@ def retrieve_chunks(query: str, top_k: int = 7) -> List[Dict[str, Any]]:
                 "score": float(r["score"]),
             }
         )
-    return chunks 
-
+    return chunks
 
 
 # --- Prompt building -------------------------------------------------------
@@ -138,6 +118,7 @@ def ask(
     - Retrieves relevant chunks.
     - Builds a persona-aware prompt.
     - Calls Gemini and returns answer + sources + model + persona key.
+    - Raises RuntimeError with a human-readable message on quota exhaustion.
     """
     persona_key = persona or DEFAULT_PERSONA
     persona_cfg = PERSONAS.get(persona_key, PERSONAS[DEFAULT_PERSONA])
@@ -155,7 +136,16 @@ def ask(
         system_instruction=persona_cfg["system_instruction"],
     )
 
-    resp = model.generate_content(prompt)
+    try:
+        resp = model.generate_content(prompt)
+    except Exception as e:
+        err = str(e)
+        if "429" in err or "quota" in err.lower() or "exhausted" in err.lower():
+            raise RuntimeError(
+                f"'{GEMINI_MODEL}' quota exhausted. "
+                "Daily limit reached — please try again after 12:30 PM IST tomorrow."
+            )
+        raise
 
     answer_text = resp.text if hasattr(resp, "text") else str(resp)
 
@@ -174,4 +164,5 @@ if __name__ == "__main__":
         sys.exit(1)
 
     result = ask(query=query, top_k=7, verbose=True)
-    print(result["answer"])
+    print(result["answer"]) 
+    

@@ -33,8 +33,6 @@ document.addEventListener("DOMContentLoaded", () => {
     currentProfile = profile;
     profileLabel.textContent = opt.textContent.trim();
     profileMenu.style.display = "none";
-
-    // Clear visible messages when switching profile (history is separate)
     chatWindow.innerHTML = "";
   });
 
@@ -60,6 +58,14 @@ document.addEventListener("DOMContentLoaded", () => {
     div.className = "sources";
     const uniqueFiles = Array.from(new Set(sources.map((s) => s.file_path)));
     div.textContent = "Sources: " + uniqueFiles.join(", ");
+    chatWindow.appendChild(div);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }
+
+  function appendError(message) {
+    const div = document.createElement("div");
+    div.className = "message assistant error";
+    div.textContent = "⚠️ " + message;
     chatWindow.appendChild(div);
     chatWindow.scrollTop = chatWindow.scrollHeight;
   }
@@ -106,19 +112,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const decoder = new TextDecoder("utf-8");
       let buffer = "";
       let assistantBuffer = "";
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        let sep;
-        while ((sep = buffer.indexOf("\n\n")) !== -1) {
-          const rawEvent = buffer.slice(0, sep);
-          buffer = buffer.slice(sep + 2);
-          handleSSEChunk(rawEvent);
-        }
-      }
+      let hasError = false;
 
       function handleSSEChunk(chunk) {
         const lines = chunk.split("\n");
@@ -137,24 +131,47 @@ document.addEventListener("DOMContentLoaded", () => {
 
         try {
           const parsed = JSON.parse(data);
-          if (eventType === "meta") {
+
+          if (eventType === "error") {
+            // Quota exhausted or other backend RuntimeError
+            appendError(parsed.message || "An error occurred.");
+            hasError = true;
+
+          } else if (eventType === "meta") {
             if (parsed.session_id) {
               setSessionIdForProfile(currentProfile, parsed.session_id);
             }
             if (parsed.sources) {
               appendSources(parsed.sources);
             }
+
           } else if (eventType === "message") {
             assistantBuffer += parsed.content || "";
           }
+
         } catch (err) {
           console.error("Failed to parse SSE data", err, data);
         }
       }
 
-      if (assistantBuffer) {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let sep;
+        while ((sep = buffer.indexOf("\n\n")) !== -1) {
+          const rawEvent = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          handleSSEChunk(rawEvent);
+        }
+      }
+
+      // Only render assistant answer if no error was received
+      if (assistantBuffer && !hasError) {
         appendMessage("assistant", assistantBuffer);
       }
+
     } catch (err) {
       console.error(err);
       appendMessage("assistant", "Error: " + String(err));
