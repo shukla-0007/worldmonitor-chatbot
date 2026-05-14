@@ -5,9 +5,10 @@ from knowledge.duckdb via HNSW cosine search.
 """
 
 import duckdb
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer 
 
-DB_PATH    = "../knowledge.duckdb"
+from pathlib import Path
+DB_PATH = str(Path(__file__).resolve().parent.parent / "knowledge.duckdb") 
 EMBED_MODEL = "all-MiniLM-L6-v2"
 TOP_K       = 7
 
@@ -36,7 +37,7 @@ def retrieve(query: str, top_k: int = TOP_K, db_path: str = DB_PATH) -> list[dic
     """
     query_vec = embed_query(query)
 
-    con = duckdb.connect(db_path, read_only=True)
+    con = duckdb.connect(db_path) 
     con.execute("LOAD vss")
     con.execute("SET hnsw_enable_experimental_persistence = true")
 
