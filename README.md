@@ -163,12 +163,11 @@ curl -X POST http://localhost:8000/chat \
 | `gemini-2.5-flash` | Higher quality needed |
 | `gemini-2.5-flash-lite` | When `gemini-2.0-flash` quota is exhausted |
 
-```bash
-# Override model
-GEMINI_API_KEY="your_key" GEMINI_MODEL="gemini-2.5-flash-lite" python scripts/chat_api.py
-```
+## On HuggingFace: 
+- `GEMINI_API_KEY` → add as **Secret** (private)
+- `GEMINI_MODEL` → add as **Variable** (public, must be uppercase) 
 
----
+--- 
 
 ## Knowledge Base
 
@@ -197,6 +196,16 @@ The vector knowledge base was built from the [WorldMonitor](https://github.com/k
 
 ---
 
+
+## Quota & Error Handling
+
+When the daily Gemini quota is exhausted, the chatbot displays:
+```
+⚠️ 'gemini-2.5-flash' quota exhausted. Daily limit reached — please try again after 12:30 PM IST tomorrow.
+```
+No crash, no blank response — handled gracefully in both `/chat` and `/chat/stream`. 
+
+
 ## Deployment (HuggingFace Spaces)
 
 The app is deployed as a Docker Space on HuggingFace.
@@ -221,6 +230,13 @@ Set `GEMINI_API_KEY` in HuggingFace → Space Settings → Variables and secrets
 - No external database required — fully in-memory
 
 ---
+
+
+Set secrets and variables in HuggingFace → Space Settings → Variables and secrets:
+- **Secret:** `GEMINI_API_KEY`
+- **Variable:** `GEMINI_MODEL` (uppercase)
+
+
 
 ## License
 
