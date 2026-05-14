@@ -6,10 +6,12 @@ Now supports profile-based personas: product, tech, support, sales.
 
 import os
 import sys
+from pathlib import Path
 from typing import List, Dict, Any
 
 import duckdb
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from retriever import retrieve
 
 # --- Model config ----------------------------------------------------------
@@ -55,8 +57,6 @@ PERSONAS: Dict[str, Dict[str, str]] = {
 DEFAULT_PERSONA = "product"
 
 # --- DB / retrieval --------------------------------------------------------
-
-from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = os.getenv("RAG_DB_PATH", str(BASE_DIR / "knowledge.duckdb"))
@@ -113,13 +113,6 @@ def ask(
     verbose: bool = False,
     persona: str = DEFAULT_PERSONA,
 ) -> Dict[str, Any]:
-    """
-    Main RAG entrypoint.
-    - Retrieves relevant chunks.
-    - Builds a persona-aware prompt.
-    - Calls Gemini and returns answer + sources + model + persona key.
-    - Raises RuntimeError with a human-readable message on quota exhaustion.
-    """
     persona_key = persona or DEFAULT_PERSONA
     persona_cfg = PERSONAS.get(persona_key, PERSONAS[DEFAULT_PERSONA])
 
@@ -129,15 +122,18 @@ def ask(
     if verbose:
         print(f"[persona={persona_key}] Retrieved {len(chunks)} chunks", file=sys.stderr)
 
-    genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-
-    model = genai.GenerativeModel(
-        model_name=GEMINI_MODEL,
-        system_instruction=persona_cfg["system_instruction"],
-    )
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
     try:
-        resp = model.generate_content(prompt)
+        resp = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=persona_cfg["system_instruction"],
+                temperature=0.2,
+                max_output_tokens=1024,
+            ),
+        )
     except Exception as e:
         err = str(e)
         if "429" in err or "quota" in err.lower() or "exhausted" in err.lower():
@@ -147,7 +143,7 @@ def ask(
             )
         raise
 
-    answer_text = resp.text if hasattr(resp, "text") else str(resp)
+    answer_text = resp.text
 
     return {
         "answer": answer_text,

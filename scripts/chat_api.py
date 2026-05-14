@@ -8,8 +8,12 @@ import os
 import json
 from pathlib import Path
 from typing import AsyncGenerator
+from dotenv import load_dotenv
 
-from fastapi import FastAPI, Request
+BASE_DIR = Path(__file__).resolve().parent.parent  # project root
+load_dotenv(BASE_DIR / ".env")
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
@@ -17,11 +21,7 @@ from pydantic import BaseModel
 
 from session_store import SessionStore
 from rag_pipeline import ask, PERSONAS, DEFAULT_PERSONA
-from dotenv import load_dotenv
-load_dotenv(BASE_DIR / ".env") 
 
-
-BASE_DIR = Path(__file__).resolve().parent.parent  # project root
 app = FastAPI()
 
 # CORS
@@ -100,7 +100,6 @@ async def stream_events(question: str, profile: str, session_id: str | None) -> 
             persona=profile,
         )
     except RuntimeError as e:
-        # Send quota error as a meta event so the UI can display it cleanly
         error_payload = {
             "type": "error",
             "session_id": session.id,
@@ -111,7 +110,6 @@ async def stream_events(question: str, profile: str, session_id: str | None) -> 
 
     session.add("assistant", result["answer"])
 
-    # meta event: sources + metadata
     meta_payload = {
         "type": "meta",
         "session_id": session.id,
@@ -121,7 +119,6 @@ async def stream_events(question: str, profile: str, session_id: str | None) -> 
     }
     yield f"event: meta\ndata: {json.dumps(meta_payload)}\n\n".encode("utf-8")
 
-    # content event: full answer in one chunk
     answer_payload = {
         "type": "answer",
         "content": result["answer"],
@@ -190,3 +187,4 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("chat_api:app", host="0.0.0.0", port=port, reload=False) 
+    
