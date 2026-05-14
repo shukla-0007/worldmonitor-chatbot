@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: worldmonitor-chatbot
+    runtime: python
+    region: singapore
+    plan: free
+    buildCommand: pip install -r scripts/requirements.txt
+    startCommand: uvicorn scripts.chat_api:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash-lite
+      - key: TOKENIZERS_PARALLELISM
+        value: "false"
+    healthCheckPath: /health

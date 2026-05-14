@@ -1,6 +1,8 @@
 # chat_api.py — Phase 4/5
 # FastAPI server wrapping RAG with per-profile sessions and streaming.
-
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # adds scripts/ to path 
 import os
 import json
 from pathlib import Path
