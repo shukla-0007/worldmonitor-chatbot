@@ -1,113 +1,128 @@
 [
   {
     "chunk_id": "chunk_00000",
-    "file_path": "AGENTS.md",
     "module": "documentation",
-    "language": "markdown",
-    "chunk_index": 0,
-    "content": "# AGENTS.md\n\nAgent entry point for WorldMonitor. Read this first, then follow links for depth.",
-    "tags": [
-      "documentation"
-    ],
-    "char_count": 94
+    "file_path": "AGENTS.md",
+    "content": "# AGENTS.md\n\nAgent entry point for WorldMonitor. Read this first, then follow links for depth."
   },
   {
-    "chunk_id": "chunk_00159",
-    "file_path": "api/_mcp-grant-hmac.ts",
-    "module": "api",
-    "language": "typescript",
-    "chunk_index": 0,
-    "content": "/**\n * HMAC sign / verify helpers for the Pro-MCP cross-subdomain grant token.\n *\n * Used by:\n *   - U3 `api/internal/mcp-grant-mint.ts` — signs `{userId, nonce, exp}`\n *     after a Clerk-authenticated Pro user clicks \"Authorize\" on the apex\n *     consent page, returns a redirect URL whose `grant=` query parameter\n *     carries the signed payload.\n *   - U5 `api/oauth/authorize-pro.ts` — verifies the grant on the api\n *     subdomain before consuming the matching `mcp-grant:<nonce>` Redis\n *     one-shot and issuing the OAuth code.\n *\n * Token wire format (load-bearing — U3 and U5 MUST agree):\n *\n *   <base64url(payloadJson)>.<base64url(sigBytes)>\n *\n *   payloadJson = JSON.stringify({ userId: string, nonce: string, exp: number })\n *   sigBytes    = HMAC-SHA-256(secret, UTF-8 bytes of payloadJson)\n *\n * The signature is computed over the *exact JSON bytes* the verifier will\n * read after base64url-decoding — NOT over a re-serialised object. This\n * makes verification independent of JSON key ordering, whitespace, or\n * future field additions: whatever bytes were signed are exactly the\n * bytes verified. Same approach as the JWS compact serialisation pattern.\n *\n * `exp` is absolute epoch milliseconds (Date.now() + 5 * 60 * 1000 at\n * mint time). Verifier compares against Date.now(); mint-time clock skew\n * is bounded by the Redis nonce TTL anyway.\n *\n * Secret env: MCP_PRO_GRANT_HMAC_SECRET (32-byte+ random, base64 OK).\n * Missing env throws — handlers MUST surface this as 500\n * `CONFIGURATION_ERROR` (NOT 401/403, which would let an attacker\n * confuse \"missing secret in prod\" with \"expired grant\").\n *\n * Edge-runtime safe: uses Web Crypto API only. No node:crypto imports.\n */\nconst ENC = new TextEncoder();const DEC = new TextDecoder();\nexport interface GrantPayload {\n  userId: string;\n  nonce: string;\n  /** Absolute epoch milliseconds. */\n  exp: number;\n}\nexport class GrantConfigError extends Error {\n  constructor(message: string) {\n    super(message);\n    this.name = 'GrantConfigError';\n  }\n}\nfunction base64UrlEncode(bytes: Uint8Array): string {\n  let bin = '';\n  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);\n  return btoa(bin).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');\n}\nfunction base64UrlDecode(s: string): Uint8Array {\n  const pad = s.length % 4 === 0 ? '' : '='.repeat(4 - (s.length % 4));\n  const b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/');\n  const bin = atob(b64);\n  const out = new Uint8Array(bin.length);\n  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);\n  return out;\n}\nasync function importHmacKey(secret: string): Promise<CryptoKey> {\n  return crypto.subtle.importKey(\n    'raw',\n    ENC.encode(secret),\n    { name: 'HMAC', hash: 'SHA-256' },\n    false,\n    ['sign', 'verify'],\n  );\n}\n\n/** Reads the env var. Throws GrantConfigError if missing/empty. */",
-    "tags": [
-      "ai",
-      "api",
-      "auth",
-      "caching",
-      "config",
-      "finance"
-    ],
-    "char_count": 2884
+    "chunk_id": "chunk_00001",
+    "module": "documentation",
+    "file_path": "AGENTS.md",
+    "content": "## What This Project Is\n\nReal-time global intelligence dashboard. TypeScript SPA (Vite + Preact) with 86 panel components, 60+ Vercel Edge API endpoints, a Tauri desktop app with Node.js sidecar, and a Railway relay service. Aggregates 30+ external data sources (geopolitics, military, finance, climate, cyber, maritime, aviation)."
   },
   {
-    "chunk_id": "chunk_00321",
-    "file_path": "blog-site/src/content/blog/ai-powered-intelligence-without-the-cloud.md",
-    "module": "frontend",
-    "language": "markdown",
-    "chunk_index": 0,
-    "content": "---\ntitle: \"AI-Powered Intelligence Without the Cloud: World Monitor's Privacy-First Approach\"\ndescription: \"Run AI-powered intelligence analysis on your own hardware. World Monitor supports Ollama, LM Studio, and in-browser ML for private geopolitical analysis.\"\nmetaTitle: \"Local AI Intelligence Analysis | World Monitor\"\nkeywords: \"local LLM intelligence, private AI analysis, offline intelligence tool, Ollama OSINT, privacy-first AI dashboard\"\naudience: \"Privacy-conscious analysts, security researchers, government users, enterprise security teams, local LLM enthusiasts\"\nheroImage: \"/blog/images/blog/ai-powered-intelligence-without-the-cloud.jpg\"\npubDate: \"2026-03-07\"\n---\n\nEvery time you paste a sensitive document into ChatGPT, that data touches someone else's servers. For intelligence analysts, security researchers, and anyone handling sensitive geopolitical information, that's not just inconvenient. It's a risk.\n\nWorld Monitor takes a different approach. Every AI feature in the platform can run entirely on your own hardware, with no data leaving your machine. If you're new to the platform, learn [what World Monitor is and how it works](/blog/posts/what-is-worldmonitor-real-time-global-intelligence/).",
-    "tags": [
-      "ai",
-      "documentation"
-    ],
-    "char_count": 1221
-  },
-  {
-    "chunk_id": "chunk_00513",
-    "file_path": "compound-engineering.local.md",
-    "module": "root",
-    "language": "markdown",
-    "chunk_index": 0,
-    "content": "---\nreview_agents:\n  - compound-engineering:review:kieran-typescript-reviewer\n  - compound-engineering:review:security-sentinel\n  - compound-engineering:review:performance-oracle\n  - compound-engineering:review:architecture-strategist\n  - compound-engineering:review:code-simplicity-reviewer\n---",
-    "tags": [
-      "documentation"
-    ],
-    "char_count": 295
-  },
-  {
-    "chunk_id": "chunk_00515",
-    "file_path": "consumer-prices-core/migrations/001_initial.sql",
-    "module": "database",
-    "language": "sql",
-    "chunk_index": 0,
-    "content": "-- Consumer Prices Core: Initial Schema\n-- Run: psql $DATABASE_URL < migrations/001_initial.sql\n\nCREATE EXTENSION IF NOT EXISTS \"pgcrypto\";\n\n-- ─── Retailers ────────────────────────────────────────────────────────────────\n\nCREATE TABLE retailers (\n  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  slug          VARCHAR(64) NOT NULL UNIQUE,\n  name          VARCHAR(128) NOT NULL,\n  market_code   CHAR(2) NOT NULL,\n  country_code  CHAR(2) NOT NULL,\n  currency_code CHAR(3) NOT NULL,\n  adapter_key   VARCHAR(32) NOT NULL DEFAULT 'generic',\n  base_url      TEXT NOT NULL,\n  active        BOOLEAN NOT NULL DEFAULT TRUE,\n  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);\n\nCREATE TABLE retailer_targets (\n  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  retailer_id   UUID NOT NULL REFERENCES retailers(id) ON DELETE CASCADE,\n  target_type   VARCHAR(32) NOT NULL CHECK (target_type IN ('category_url','product_url','search_query')),\n  target_ref    TEXT NOT NULL,\n  category_slug VARCHAR(64) NOT NULL,\n  enabled       BOOLEAN NOT NULL DEFAULT TRUE,\n  last_scraped_at TIMESTAMPTZ\n);\n\n-- ─── Products ─────────────────────────────────────────────────────────────────\n\nCREATE TABLE canonical_products (\n  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  canonical_name VARCHAR(256) NOT NULL,\n  brand_norm     VARCHAR(128),\n  category       VARCHAR(64) NOT NULL,\n  variant_norm   VARCHAR(128),\n  size_value     NUMERIC(12,4),\n  size_unit      VARCHAR(16),\n  base_quantity  NUMERIC(12,4),\n  base_unit      VARCHAR(16),\n  active         BOOLEAN NOT NULL DEFAULT TRUE,\n  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  UNIQUE (canonical_name, brand_norm, category, variant_norm, size_value, size_unit)\n);\n\nCREATE TABLE retailer_products (\n  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  retailer_id         UUID NOT NULL REFERENCES retailers(id) ON DELETE CASCADE,\n  retailer_sku        VARCHAR(128),\n  canonical_product_id UUID REFERENCES canonical_products(id),\n  source_url          TEXT NOT NULL,\n  raw_title           TEXT NOT NULL,\n  raw_brand           TEXT,\n  raw_size_text       TEXT,\n  image_url           TEXT,\n  category_text       TEXT,\n  first_seen_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  last_seen_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  active              BOOLEAN NOT NULL DEFAULT TRUE,\n  UNIQUE (retailer_id, source_url)\n);\n\nCREATE INDEX idx_retailer_products_retailer ON retailer_products(retailer_id);\nCREATE INDEX idx_retailer_products_canonical ON retailer_products(canonical_product_id) WHERE canonical_product_id IS NOT NULL;\n\n-- ─── Observations ─────────────────────────────────────────────────────────────\n\nCREATE TABLE scrape_runs (\n  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  retailer_id       UUID NOT NULL REFERENCES retailers(id),\n  started_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  finished_at       TIMESTAMPTZ,\n  status            VARCHAR(16) NOT NULL DEFAULT 'running'\n                    CHECK (status IN ('running','completed','failed','partial')),\n  trigger_type      VARCHAR(16) NOT NULL DEFAULT 'scheduled'",
-    "tags": [
-      "ai",
-      "finance"
-    ],
-    "char_count": 3196
-  },
-  {
-    "chunk_id": "chunk_03129",
-    "file_path": "proto/sebuf/http/annotations.proto",
-    "module": "api_contracts",
-    "language": "protobuf",
-    "chunk_index": 0,
-    "content": "syntax = \"proto3\";\n\npackage sebuf.http;\n\nimport \"google/protobuf/descriptor.proto\";\n\noption go_package = \"github.com/SebastienMelki/sebuf/http;http\";\n\n// HttpMethod specifies the HTTP verb for an RPC method\nenum HttpMethod {\n  // Unspecified defaults to POST for backward compatibility\n  HTTP_METHOD_UNSPECIFIED = 0;\n  HTTP_METHOD_GET = 1;\n  HTTP_METHOD_POST = 2;\n  HTTP_METHOD_PUT = 3;\n  HTTP_METHOD_DELETE = 4;\n  HTTP_METHOD_PATCH = 5;\n}\n\n// HttpConfig defines HTTP-specific configuration for an RPC method\nmessage HttpConfig {\n  // The HTTP path for this method (supports path variables like /users/{id})\n  string path = 1;\n\n  // The HTTP method (GET, POST, PUT, DELETE, PATCH). Defaults to POST if unspecified.\n  HttpMethod method = 2;\n}\n\n// Extension for method options\nextend google.protobuf.MethodOptions {\n  HttpConfig config = 50003;\n}\n\n// ServiceConfig defines HTTP-specific configuration for an entire service\nmessage ServiceConfig {\n  // Base path prefix for all methods in this service\n  string base_path = 1;\n}\n\n// Extension for service options\nextend google.protobuf.ServiceOptions {\n  ServiceConfig service_config = 50004;\n}\n\n// FieldExamples defines example values for a field\nmessage FieldExamples {\n  // List of example values for this field\n  repeated string values = 1;\n}\n\n// QueryConfig defines query parameter configuration for a message field\nmessage QueryConfig {\n  // The query parameter name in the URL (e.g., \"page_size\" for ?page_size=10)\n  string name = 1;\n\n  // Whether this query parameter is required\n  bool required = 2;\n}\n\n// Int64Encoding specifies how int64 fields should be encoded in generated TypeScript.\n// By default, int64 fields generate as `string` for JSON safety. When set to\n// INT64_ENCODING_NUMBER, the field generates as `number` instead -- suitable for\n// values that fit within Number.MAX_SAFE_INTEGER (e.g., Unix epoch milliseconds).\nenum Int64Encoding {\n  // Unspecified -- use default behavior (string).\n  INT64_ENCODING_UNSPECIFIED = 0;\n  // Encode as string (default JSON behavior for int64).\n  INT64_ENCODING_STRING = 1;\n  // Encode as number -- only use for values within Number.MAX_SAFE_INTEGER.\n  INT64_ENCODING_NUMBER = 2;\n}\n\n// Extension for field-level options\nextend google.protobuf.FieldOptions {\n  // Example values for documentation/OpenAPI\n  FieldExamples field_examples = 50007;\n\n  // Query parameter configuration for a field\n  QueryConfig query = 50008;\n\n  // Mark a repeated field for unwrapping when parent message is a map value.\n  // When set to true on a repeated field, and the message containing this field\n  // is used as a map value, the JSON serialization will collapse the wrapper\n  // to just the unwrapped field's array value.\n  // Constraints: Only valid on repeated fields, only one per message.\n  bool unwrap = 50009;\n\n  // Specify how an int64 field should be encoded in generated TypeScript code.\n  // Use INT64_ENCODING_NUMBER for timestamp fields (Unix epoch milliseconds)\n  // that safely fit within JavaScript's Number.MAX_SAFE_INTEGER.\n  Int64Encoding int64_encoding = 50010;\n}",
-    "tags": [
-      "ai",
-      "api",
-      "api_contracts",
-      "config",
-      "maps",
-      "testing"
-    ],
-    "char_count": 3073
-  },
-  {
-    "chunk_id": "chunk_03441",
-    "file_path": "scripts/nixpacks.toml",
-    "module": "scripts",
-    "language": "toml",
-    "chunk_index": 0,
-    "content": "[phases.setup]\n# aptPkgs = [\"curl\"]  — same workaround as root nixpacks.toml; see comment there.\ncmds = [\"sudo apt-get update -o Acquire::AllowInsecureRepositories=false || true\", \"sudo apt-get install -y --no-install-recommends --fix-missing curl || echo 'apt curl install failed; curl may already be present'\"]\n\n[variables]\nNODE_OPTIONS = \"--dns-result-order=ipv4first\"",
-    "tags": [
-      "ai"
-    ],
-    "char_count": 371
+    "chunk_id": "chunk_00002",
+    "module": "documentation",
+    "file_path": "AGENTS.md",
+    "content": "## Repository Map\n\n```\n.\n\u251c\u2500\u2500 src/                    # Browser SPA (TypeScript, class-based components)\n\u2502   \u251c\u2500\u2500 app/                # App orchestration (data-loader, refresh-scheduler, panel-layout)\n\u2502   \u251c\u2500\u2500 components/         # 86 UI panels + map components (Panel subclasses)\n\u2502   \u251c\u2500\u2500 config/             # Variant configs, panel/layer definitions, market symbols\n\u2502   \u251c\u2500\u2500 services/           # Business logic (120+ service files, organized by domain)\n\u2502   \u251c\u2500\u2500 types/              # TypeScript type de..."
   },
   {
     "chunk_id": "chunk_03442",
-    "file_path": "server/__tests__/entitlement-check.test.ts",
     "module": "server",
-    "language": "typescript",
-    "chunk_index": 0,
-    "content": "// @vitest-environment node\n\n/**\n * Unit tests for gateway entitlement check logic.\n *\n * Mocking strategy: Controls the Redis mock return value to steer what\n * getEntitlements returns — no dependency injection needed. Since CONVEX_SITE_URL\n * is not set in most tests, the Convex fallback is skipped and getCachedJson is\n * the sole source of entitlement data.\n *\n * Per-file @vitest-environment node override avoids edge-runtime's missing\n * process.env for these helpers.\n */\n\nimport { describe, test, expect, vi } from \"vitest\";\n\n// ---------------------------------------------------------------------------\n// Mock the Redis dependency so the module loads without a real Redis connection\n// ---------------------------------------------------------------------------\nvi.mock(\"../_shared/redis\", () => ({\n  getCachedJson: vi.fn().mockResolvedValue(null),\n  setCachedJson: vi.fn().mockResolvedValue(undefined),\n}));\n\nimport { getCachedJson } from \"../_shared/redis\";\nimport {\n  getRequiredTier,\n  checkEntitlement,\n} from \"../_shared/entitlement-check\";\n\n// ---------------------------------------------------------------------------\n// Helpers\n// ---------------------------------------------------------------------------\nconst FUTURE = Date.now() + 86400000 * 30;\nfunction makeRequest(\n  pathname: string,\n  headers: Record<string, string> = {},\n): Request {\n  return new Request(`https://worldmonitor.app${pathname}`, { headers });\n}",
-    "tags": [
-      "api",
-      "caching",
-      "config",
-      "testing"
-    ],
-    "char_count": 1442
+    "file_path": "server/__tests__/entitlement-check.test.ts",
+    "content": "// @vitest-environment node\n\n/**\n * Unit tests for gateway entitlement check logic.\n *\n * Mocking strategy: Controls the Redis mock return value to steer what\n * getEntitlements returns \u2014 no dependency injection needed. Since CONVEX_SITE_URL\n * is not set in most tests, the Convex fallback is skipped and getCachedJson is\n * the sole source of entitlement data.\n *\n * Per-file @vitest-environment node override avoids edge-runtime's missing\n * process.env for these helpers.\n */\n\nimport { describe, ..."
+  },
+  {
+    "chunk_id": "chunk_03443",
+    "module": "server",
+    "file_path": "server/__tests__/entitlement-check.test.ts",
+    "content": "function makeEntitlements(tier: number, planKey = \"free\") {\n  return {\n    planKey,\n    features: {\n      tier,\n      apiAccess: tier >= 2,\n      apiRateLimit: tier >= 2 ? 60 : 0,\n      maxDashboards: tier >= 1 ? 10 : 3,\n      prioritySupport: tier >= 2,\n      exportFormats: tier >= 2 ? [\"csv\", \"pdf\", \"json\"] : [\"csv\"],\n      // Plan 2026-05-10-001 U10 added mcpAccess to the feature set. Cache\n      // entries lacking this field are now treated as stale by\n      // _getEntitlementsImpl (round-2 ..."
+  },
+  {
+    "chunk_id": "chunk_03444",
+    "module": "server",
+    "file_path": "server/__tests__/entitlement-check.test.ts",
+    "content": "ements(0));\n\n    const req = makeRequest(\"/api/market/v1/analyze-stock\", { \"x-user-id\": \"test-user\" });\n    const result = await checkEntitlement(req, \"/api/market/v1/analyze-stock\", {});\n\n    expect(result).not.toBeNull();\n    expect(result!.status).toBe(403);\n\n    const body = await result!.json();\n    expect(body.error).toBe(\"Upgrade required\");\n    expect(body.requiredTier).toBe(1);\n    expect(body.currentTier).toBe(0);\n  });\n\n  test(\"checkEntitlement returns null for Pro tier (tier=1) on st..."
+  },
+  {
+    "chunk_id": "chunk_00159",
+    "module": "api",
+    "file_path": "api/_mcp-grant-hmac.ts",
+    "content": "/**\n * HMAC sign / verify helpers for the Pro-MCP cross-subdomain grant token.\n *\n * Used by:\n *   - U3 `api/internal/mcp-grant-mint.ts` \u2014 signs `{userId, nonce, exp}`\n *     after a Clerk-authenticated Pro user clicks \"Authorize\" on the apex\n *     consent page, returns a redirect URL whose `grant=` query parameter\n *     carries the signed payload.\n *   - U5 `api/oauth/authorize-pro.ts` \u2014 verifies the grant on the api\n *     subdomain before consuming the matching `mcp-grant:<nonce>` Redis\n * ..."
+  },
+  {
+    "chunk_id": "chunk_00160",
+    "module": "api",
+    "file_path": "api/_mcp-grant-hmac.ts",
+    "content": "export function readGrantSecret(env: NodeJS.ProcessEnv = process.env): string {\n  const secret = env.MCP_PRO_GRANT_HMAC_SECRET ?? '';\n  if (!secret) {\n    // TEMP DIAGNOSTIC (PR #3646): on missing-secret, log the NAMES (not values)\n    // of every process.env key starting with `MCP_` so we can confirm whether\n    // the runtime sees the linked Shared env vars at all. Removed in the next\n    // commit once root cause is confirmed.\n    try {\n      const mcpKeys = Object.keys(env)\n        .filter((..."
+  },
+  {
+    "chunk_id": "chunk_00161",
+    "module": "api",
+    "file_path": "api/_mcp-grant-hmac.ts",
+    "content": "export async function verifyGrant(token: string, secret?: string, now: number = Date.now()): Promise<GrantVerifyResult> {\n  if (typeof token !== 'string' || token.length === 0) return { ok: false, reason: 'malformed' };\n  const dot = token.indexOf('.');\n  if (dot <= 0 || dot === token.length - 1) return { ok: false, reason: 'malformed' };\n  const payloadB64 = token.slice(0, dot);\n  const sigB64 = token.slice(dot + 1);\n  // Stricter than RFC 7515: we only emit base64url-no-pad, so anything\n  // o..."
+  },
+  {
+    "chunk_id": "chunk_00515",
+    "module": "database",
+    "file_path": "consumer-prices-core/migrations/001_initial.sql",
+    "content": "-- Consumer Prices Core: Initial Schema\n-- Run: psql $DATABASE_URL < migrations/001_initial.sql\n\nCREATE EXTENSION IF NOT EXISTS \"pgcrypto\";\n\n-- \u2500\u2500\u2500 Retailers \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\nCREATE TABLE retailers (\n  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  slug          VARCHAR(64) NOT NULL UNIQUE,\n  name          VARCHAR(128) NOT NULL,\n  market_code   CHAR(2) NOT NULL,\n  country_code  CHAR(2) NOT NULL,\n  currency_code CHAR(3) NOT NULL,\n  ada..."
+  },
+  {
+    "chunk_id": "chunk_00516",
+    "module": "database",
+    "file_path": "consumer-prices-core/migrations/001_initial.sql",
+    "content": "UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  retailer_id       UUID NOT NULL REFERENCES retailers(id),\n  started_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  finished_at       TIMESTAMPTZ,\n  status            VARCHAR(16) NOT NULL DEFAULT 'running'\n                    CHECK (status IN ('running','completed','failed','partial')),\n  trigger_type      VARCHAR(16) NOT NULL DEFAULT 'scheduled'\n                    CHECK (trigger_type IN ('scheduled','manual')),\n  pages_attempted   INT NOT NULL DEFA..."
+  },
+  {
+    "chunk_id": "chunk_00517",
+    "module": "database",
+    "file_path": "consumer-prices-core/migrations/001_initial.sql",
+    "content": "UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  basket_id             UUID NOT NULL REFERENCES baskets(id) ON DELETE CASCADE,\n  category              VARCHAR(64) NOT NULL,\n  canonical_product_id  UUID REFERENCES canonical_products(id),\n  substitution_group    VARCHAR(64),\n  weight                NUMERIC(5,4) NOT NULL,\n  qualification_rules_json JSONB,\n  active                BOOLEAN NOT NULL DEFAULT TRUE\n);\n\nALTER TABLE product_matches ADD CONSTRAINT fk_pm_basket_item\n  FOREIGN KEY (basket_item_id..."
+  },
+  {
+    "chunk_id": "chunk_00321",
+    "module": "frontend",
+    "file_path": "blog-site/src/content/blog/ai-powered-intelligence-without-the-cloud.md",
+    "content": "---\ntitle: \"AI-Powered Intelligence Without the Cloud: World Monitor's Privacy-First Approach\"\ndescription: \"Run AI-powered intelligence analysis on your own hardware. World Monitor supports Ollama, LM Studio, and in-browser ML for private geopolitical analysis.\"\nmetaTitle: \"Local AI Intelligence Analysis | World Monitor\"\nkeywords: \"local LLM intelligence, private AI analysis, offline intelligence tool, Ollama OSINT, privacy-first AI dashboard\"\naudience: \"Privacy-conscious analysts, security res..."
+  },
+  {
+    "chunk_id": "chunk_00322",
+    "module": "frontend",
+    "file_path": "blog-site/src/content/blog/ai-powered-intelligence-without-the-cloud.md",
+    "content": "## The Problem with Cloud-Based Intelligence Tools\n\nMost AI-powered analysis tools follow the same pattern: your data goes up to a cloud API, gets processed, and the result comes back. This works fine for writing emails. It's problematic when you're analyzing:\n\n- Military deployment patterns\n- Classified or sensitive government communications\n- Corporate intelligence on merger targets\n- Supply chain vulnerabilities in critical infrastructure\n- Threat assessments for physical security operations\n..."
+  },
+  {
+    "chunk_id": "chunk_00323",
+    "module": "frontend",
+    "file_path": "blog-site/src/content/blog/ai-powered-intelligence-without-the-cloud.md",
+    "content": "## World Monitor's 4-Tier AI Architecture\n\nWorld Monitor solves this with a **4-tier LLM fallback chain** that starts local and only reaches for the cloud if you explicitly allow it:"
+  },
+  {
+    "chunk_id": "chunk_03129",
+    "module": "api_contracts",
+    "file_path": "proto/sebuf/http/annotations.proto",
+    "content": "syntax = \"proto3\";\n\npackage sebuf.http;\n\nimport \"google/protobuf/descriptor.proto\";\n\noption go_package = \"github.com/SebastienMelki/sebuf/http;http\";\n\n// HttpMethod specifies the HTTP verb for an RPC method\nenum HttpMethod {\n  // Unspecified defaults to POST for backward compatibility\n  HTTP_METHOD_UNSPECIFIED = 0;\n  HTTP_METHOD_GET = 1;\n  HTTP_METHOD_POST = 2;\n  HTTP_METHOD_PUT = 3;\n  HTTP_METHOD_DELETE = 4;\n  HTTP_METHOD_PATCH = 5;\n}\n\n// HttpConfig defines HTTP-specific configuration for an RP..."
+  },
+  {
+    "chunk_id": "chunk_03130",
+    "module": "api_contracts",
+    "file_path": "proto/worldmonitor/aviation/v1/airport_delay.proto",
+    "content": "syntax = \"proto3\";\n\npackage worldmonitor.aviation.v1;\n\nimport \"buf/validate/validate.proto\";\nimport \"sebuf/http/annotations.proto\";\nimport \"worldmonitor/core/v1/geo.proto\";\n\n// AirportDelayAlert represents a flight delay advisory at an airport.\n// Sourced from FAA and Eurocontrol.\nmessage AirportDelayAlert {\n  // Unique alert identifier.\n  string id = 1 [\n    (buf.validate.field).required = true,\n    (buf.validate.field).string.min_len = 1\n  ];\n  // IATA airport code (e.g., \"JFK\").\n  string iata..."
+  },
+  {
+    "chunk_id": "chunk_03131",
+    "module": "api_contracts",
+    "file_path": "proto/worldmonitor/aviation/v1/airport_delay.proto",
+    "content": "NOR = 2;\n  // Moderate delays 15-45 minutes.\n  FLIGHT_DELAY_SEVERITY_MODERATE = 3;\n  // Major delays 45-90 minutes.\n  FLIGHT_DELAY_SEVERITY_MAJOR = 4;\n  // Severe delays over 90 minutes.\n  FLIGHT_DELAY_SEVERITY_SEVERE = 5;\n}\n\n// FlightDelaySource represents the source of delay data.\nenum FlightDelaySource {\n  // Unspecified source.\n  FLIGHT_DELAY_SOURCE_UNSPECIFIED = 0;\n  // FAA (US Federal Aviation Administration).\n  FLIGHT_DELAY_SOURCE_FAA = 1;\n  // Eurocontrol (European air traffic management..."
+  },
+  {
+    "chunk_id": "chunk_00513",
+    "module": "root",
+    "file_path": "compound-engineering.local.md",
+    "content": "---\nreview_agents:\n  - compound-engineering:review:kieran-typescript-reviewer\n  - compound-engineering:review:security-sentinel\n  - compound-engineering:review:performance-oracle\n  - compound-engineering:review:architecture-strategist\n  - compound-engineering:review:code-simplicity-reviewer\n---"
+  },
+  {
+    "chunk_id": "chunk_00514",
+    "module": "root",
+    "file_path": "compound-engineering.local.md",
+    "content": "# WorldMonitor Review Context\n\nTypeScript monorepo: Vanilla TS panels (no React), sebuf proto RPCs, Redis-cached seed data,\nVercel edge functions, Railway cron seeds.\n\nKey patterns:\n\n- Panels extend `Panel` base class with `fetchData()` returning boolean, `setContent(html)`, `showError(msg, retry)`\n- Private `_hasData` guard prevents overwriting good data with error on retry\n- Seed scripts use `runSeed(domain, name, key, fetchFn, options)` with TTL \u2265 3\u00d7 seed interval\n- RPC handlers read from Red..."
+  },
+  {
+    "chunk_id": "chunk_00649",
+    "module": "root",
+    "file_path": "consumer-prices-core/vitest.config.ts",
+    "content": "import { defineConfig } from 'vitest/config';\n\nexport default defineConfig({\n  test: {\n    include: ['src/**/*.test.ts'],\n    exclude: ['**/node_modules/**', '**/dist/**', 'src/adapters/search.smoke.ts'],\n  },\n});"
   }
 ]
